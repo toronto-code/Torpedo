@@ -1,0 +1,48 @@
+{
+  "name": "torpedo-guidance-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "desktop": "tauri dev",
+    "desktop:dev": "vite --host 127.0.0.1 --port 1420",
+    "desktop:build": "vite build",
+    "desktop:package": "tauri build",
+    "desktop:check": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "test": "npm run test:unit && npm run build && npm run lint",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "sim:headless": "node --import tsx scripts/run-headless.ts",
+    "sim:compare": "node --import tsx scripts/run-headless.ts --compare",
+    "sim:monte-carlo": "node --import tsx scripts/run-monte-carlo.ts",
+    "sim:fidelity": "node --import tsx scripts/run-fidelity.ts",
+    "sim:soak": "node --import tsx scripts/run-soak.ts",
+    "demo:encode": "node --import tsx scripts/encode-demo-video.ts",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/node": "22.19.19",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@types/three": "^0.185.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "eslint": "9.39.4",
+    "tsx": "^4.23.12",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.46.2",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
+  },
+  "type": "module"
+}

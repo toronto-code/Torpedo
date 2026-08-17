@@ -1,0 +1,114 @@
+# Torpedo Guidance Simulator
+
+![Guidance Estimation Laboratory demo](assets/guidance-estimation-demo.gif)
+
+[Watch the 12-second H.264 demo](assets/guidance-estimation-demo.mp4) ·
+[View the full-resolution workstation frame](assets/guidance-estimation-demo-poster.png)
+
+An engineering portfolio project about **guidance and state estimation under
+sensor uncertainty**. The simulator is a native desktop application, not a hosted
+website. Its deterministic kernel provides selectable validated 2.5D and 6-DOF
+vehicle dynamics, including a published civilian BlueROV2 Heavy reference profile,
+a limited-FOV noisy seeker, raw tracking, an Extended
+Kalman Filter, pure pursuit, proportional navigation, ablation runs, and CSV
+telemetry. An optional software-only acoustic channel adds configurable water-column
+properties, analytic spreading and absorption, a synthetic echo link budget,
+probability of detection, and two-way propagation latency.
+
+This repository does not model or claim correspondence to operational hardware.
+The default 6-DOF profile uses published civilian ROV coefficients; the archived
+high-speed demonstration retains an explicitly fictional sensitivity profile. The
+purpose is numerical methods, estimator consistency, control limits, and reproducible
+experimentation.
+
+The native interface is organized as two engineering workspaces. **Simulation**
+contains a world X–Z plan view, configuration manifest, explicit observer/track/
+measurement/covariance symbology, estimator-quality state, measurement provenance,
+and an immutable run record. **Analysis** contains paired synthetic experiments,
+the model-qualification basis, and replay/audit evidence. Track-quality labels are
+derived for presentation only and never enter estimation, guidance, or control.
+
+## Run the simulator
+
+```bash
+npm install
+npm run desktop
+npm run sim:headless
+npm run sim:compare
+npm run sim:headless -- --mode raw --law pure-pursuit --scenario scripted-evasive
+npm run sim:compare -- --seed 42 --csv outputs/engagement.csv
+npm run sim:monte-carlo -- --runs 20 --seed 42
+npm run sim:fidelity -- --runs 8 --scenario scripted-evasive
+npm run sim:soak -- --duration 600
+npm run sim:soak -- --duration 600 --dynamics six-dof
+npm run test:unit
+```
+
+`npm run desktop` opens the Tauri application. `npm run desktop:package` builds
+the native macOS application bundle without producing an installer; Release 1
+intentionally has no hosted deployment. Telemetry exports are written to
+`Documents/Guidance Estimation Laboratory` by the native shell.
+
+The historical reference run remains reproducible in the configuration library:
+seed `20260814`, fictional 6-DOF dynamics, scripted evasive target, noisy
+EKF-assisted tracking, proportional navigation, and 4× wall-clock speed. It is no
+longer exposed as a presentation-oriented button in the engineering workspace.
+The checked-in video was captured from that preset and includes the real
+Worker-driven simulation and live telemetry. To regenerate it from a numbered frame sequence, run
+`npm run demo:encode -- --frames work/demo-frames --out assets`; FFmpeg must be
+available on `PATH` (or supplied with `--ffmpeg /absolute/path/to/ffmpeg`).
+
+The authoritative Worker advances at 200 Hz with fixed-step RK4. Autopilot runs
+at 100 Hz, guidance and render snapshots at 50 Hz, and telemetry at 20 Hz. The
+Three.js display interpolates snapshots at display refresh rate and cannot advance
+simulation state. Seeker observations retain their measurement timestamp and are
+delivered after modeled latency.
+
+See [docs/architecture.md](docs/architecture.md) for the runtime boundary and
+timing model, [docs/phase-3-report.md](docs/phase-3-report.md) for the desktop
+implementation and QA report, and [docs/statistical-validation.md](docs/statistical-validation.md)
+for the Stage 2 experiment methodology. The latest corrective review is recorded in
+[docs/error-audit.md](docs/error-audit.md). Stage 4 replay, profiling, numerical
+soak, and Worker recovery behavior is documented in
+[docs/phase-4-report.md](docs/phase-4-report.md). The 6-DOF implementation and
+paired fidelity result are documented in
+[docs/phase-5-6-report.md](docs/phase-5-6-report.md). The acoustic equations,
+public research basis, and limitations are in
+[docs/acoustic-model.md](docs/acoustic-model.md). The civilian coefficient mapping,
+source values, and remaining limitations are documented in
+[docs/hydrodynamic-reference.md](docs/hydrodynamic-reference.md).
+
+## Ablation modes
+
+- `perfect`: adapts truth into a zero-uncertainty `TrackEstimate` for a declared
+  experimental baseline.
+- `raw`: converts only delivered bearing/range observations and estimates
+  velocity through finite differences.
+- `ekf`: applies a four-state constant-velocity EKF with nonlinear bearing/range
+  measurement updates, Joseph-form covariance correction, angle wrapping, and
+  Mahalanobis innovation gating.
+
+All modes use identical scenario and sensor seeds for paired comparisons.
+
+## Project status
+
+- Complete architecture contracts and Worker protocol
+- Phase 1 headless vertical slice
+- Stage 2 paired Monte Carlo runner and statistical consistency reports
+- Phase 3 native Tauri + Three.js technical presentation
+- Stage 4 versioned replay, synchronized timeline scrubbing, and deterministic verification
+- Worker heartbeat supervision, bounded automatic recovery, and runtime profiling
+- Long-run numerical soak checks with finite-state containment
+- Phase 5 replaceable 6-DOF rigid-body model, trim solver, and current disturbances
+- Phase 6 paired 2.5D/6-DOF study with actuator-lag and authority isolation sweeps
+- Native model controls, full-attitude rendering, fidelity analysis, and JSON/CSV exports
+- Deterministic reference configuration with verified MP4, GIF, and poster artifacts
+- Technical orthographic plan view with interpolated 50 Hz snapshots
+- Two-workspace engineering UI, tabular experiment manifests, synchronized plots, diagnostic geometry, and native exports
+- Measurement IDs and timestamps, latency provenance, innovation/gate status, and display-only track-quality states
+- Frozen configuration hashes, versioned event counts, qualification basis, and explicit synthetic-model boundary
+- Configurable synthetic acoustic environment with sound speed, absorption, link budget, detection probability, and propagation delay
+- Software-only simulated sensor/navigation stream with no hardware, live network, or external targeting interface
+- Raw, summary, histogram, empirical CDF, and JSON experiment exports
+- Numerical, sensor-distribution, EKF, guidance, determinism, and regression tests
+- No hosted website
