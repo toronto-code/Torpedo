@@ -19,6 +19,6 @@ export function targetYawRateCommand(
 export function horizontalRange(a: VehicleState, b: VehicleState): number {
   return Math.hypot(
     a.position.x - b.position.x,
-    a.position.z - b.position.z,
+    a.position.y - b.position.y,
   );
 }

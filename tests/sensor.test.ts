@@ -46,11 +46,11 @@ describe("seeker", () => {
     const target = initialVehicleState(config.target);
     const trueRange = Math.hypot(
       target.position.x - own.position.x,
-      target.position.z - own.position.z,
+      target.position.y - own.position.y,
     );
     const trueBearing = wrapAngle(
       Math.atan2(
-        target.position.z - own.position.z,
+        target.position.y - own.position.y,
         target.position.x - own.position.x,
       ) - own.heading,
     );

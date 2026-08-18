@@ -32,8 +32,8 @@ export function conjugateQuaternion(value: Quaternion): Quaternion {
 }
 
 export function quaternionFromHeading(heading: number): Quaternion {
-  const half = -heading * 0.5;
-  return { w: Math.cos(half), x: 0, y: Math.sin(half), z: 0 };
+  const half = heading * 0.5;
+  return { w: Math.cos(half), x: 0, y: 0, z: Math.sin(half) };
 }
 
 export function rotateVector(value: Quaternion, vector: Vec3): Vec3 {
@@ -66,22 +66,27 @@ export function quaternionDerivative(
   };
 }
 
+/**
+ * NED Euler extraction with the body frame x = forward, y = starboard,
+ * z = down. Heading is atan2(East, North), pitch is positive nose-up, and
+ * roll is positive starboard-down about the forward axis.
+ */
 export function orientationAngles(orientation: Quaternion): {
   heading: number;
   roll: number;
   pitch: number;
 } {
   const forward = rotateVector(orientation, { x: 1, y: 0, z: 0 });
-  const up = rotateVector(orientation, { x: 0, y: 1, z: 0 });
-  const horizontal = Math.hypot(forward.x, forward.z);
-  const heading = Math.atan2(forward.z, forward.x);
-  const pitch = Math.atan2(forward.y, Math.max(1e-15, horizontal));
+  const up = rotateVector(orientation, { x: 0, y: 0, z: -1 });
+  const horizontal = Math.hypot(forward.x, forward.y);
+  const heading = Math.atan2(forward.y, forward.x);
+  const pitch = Math.atan2(-forward.z, Math.max(1e-15, horizontal));
   const horizontalRight = horizontal < 1e-12
-    ? { x: 0, y: 0, z: 1 }
-    : { x: -forward.z / horizontal, y: 0, z: forward.x / horizontal };
+    ? { x: 0, y: 1, z: 0 }
+    : { x: -forward.y / horizontal, y: forward.x / horizontal, z: 0 };
   const roll = Math.atan2(
-    up.x * horizontalRight.x + up.z * horizontalRight.z,
-    clamp(up.y, -1, 1),
+    up.x * horizontalRight.x + up.y * horizontalRight.y,
+    clamp(-up.z, -1, 1),
   );
   return { heading, roll, pitch };
 }

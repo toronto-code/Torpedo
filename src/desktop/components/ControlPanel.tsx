@@ -207,13 +207,13 @@ export function ControlPanel(props: Props) {
         )}
 
         <details className="parameter-group">
-          <summary>INITIAL STATE · WORLD X–Z</summary>
+          <summary>INITIAL STATE · NED</summary>
           <div className="table-subtitle">OBSERVER VEHICLE</div>
           <table className="config-table">
             <tbody>
-              <ParameterRow label="Position X" value={props.config.torpedo.initial.position.x} unit="m" step={1} onChange={(value) => update((draft) => { draft.torpedo.initial.position.x = value; })} />
-              <ParameterRow label="Position Z" value={props.config.torpedo.initial.position.z} unit="m" step={1} onChange={(value) => update((draft) => { draft.torpedo.initial.position.z = value; })} />
-              <ParameterRow label="Depth" value={props.config.torpedo.initial.depth} unit="m" min={0} step={1} onChange={(value) => update((draft) => { draft.torpedo.initial.depth = Math.max(0, value); draft.torpedo.initial.position.y = -draft.torpedo.initial.depth; })} />
+              <ParameterRow label="North" value={props.config.torpedo.initial.position.x} unit="m" step={1} onChange={(value) => update((draft) => { draft.torpedo.initial.position.x = value; })} />
+              <ParameterRow label="East" value={props.config.torpedo.initial.position.y} unit="m" step={1} onChange={(value) => update((draft) => { draft.torpedo.initial.position.y = value; })} />
+              <ParameterRow label="Depth" value={props.config.torpedo.initial.depth} unit="m" min={0} step={1} onChange={(value) => update((draft) => { draft.torpedo.initial.depth = Math.max(0, value); draft.torpedo.initial.position.z = draft.torpedo.initial.depth; })} />
               <ParameterRow label="Speed" value={props.config.torpedo.initial.speed} unit="m/s" min={0} step={0.1} onChange={(value) => update((draft) => { draft.torpedo.initial.speed = Math.max(0, value); })} />
               <ParameterRow label="Heading" value={Number(degrees(props.config.torpedo.initial.heading).toFixed(1))} unit="deg" step={1} onChange={(value) => update((draft) => { draft.torpedo.initial.heading = radians(value); })} />
             </tbody>
@@ -221,9 +221,9 @@ export function ControlPanel(props: Props) {
           <div className="table-subtitle">TRACKED OBJECT</div>
           <table className="config-table">
             <tbody>
-              <ParameterRow label="Position X" value={props.config.target.initial.position.x} unit="m" step={1} onChange={(value) => update((draft) => { draft.target.initial.position.x = value; })} />
-              <ParameterRow label="Position Z" value={props.config.target.initial.position.z} unit="m" step={1} onChange={(value) => update((draft) => { draft.target.initial.position.z = value; })} />
-              <ParameterRow label="Depth" value={props.config.target.initial.depth} unit="m" min={0} step={1} onChange={(value) => update((draft) => { draft.target.initial.depth = Math.max(0, value); draft.target.initial.position.y = -draft.target.initial.depth; })} />
+              <ParameterRow label="North" value={props.config.target.initial.position.x} unit="m" step={1} onChange={(value) => update((draft) => { draft.target.initial.position.x = value; })} />
+              <ParameterRow label="East" value={props.config.target.initial.position.y} unit="m" step={1} onChange={(value) => update((draft) => { draft.target.initial.position.y = value; })} />
+              <ParameterRow label="Depth" value={props.config.target.initial.depth} unit="m" min={0} step={1} onChange={(value) => update((draft) => { draft.target.initial.depth = Math.max(0, value); draft.target.initial.position.z = draft.target.initial.depth; })} />
               <ParameterRow label="Speed" value={props.config.target.initial.speed} unit="m/s" min={0} step={0.1} onChange={(value) => update((draft) => { draft.target.initial.speed = Math.max(0, value); })} />
               <ParameterRow label="Heading" value={Number(degrees(props.config.target.initial.heading).toFixed(1))} unit="deg" step={1} onChange={(value) => update((draft) => { draft.target.initial.heading = radians(value); })} />
             </tbody>

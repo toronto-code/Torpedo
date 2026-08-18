@@ -1,10 +1,15 @@
+/**
+ * Simulation coordinates are NED: x = North, y = East, z = Down (positive-down
+ * depth). Vec2 is the horizontal (North, East) pair consumed by the planar
+ * guidance/estimation/sensing boundary.
+ */
 export interface Vec2 {
   x: number;
-  z: number;
+  y: number;
 }
 
 export interface Vec3 extends Vec2 {
-  y: number;
+  z: number;
 }
 
 export interface Quaternion {

@@ -25,7 +25,7 @@ export function computeGuidance(
     input.ownVelocity,
   );
   const range = Math.max(1e-6, magnitude2(relativePosition));
-  const losHeading = Math.atan2(relativePosition.z, relativePosition.x);
+  const losHeading = Math.atan2(relativePosition.y, relativePosition.x);
   const losRate =
     cross2(relativePosition, relativeVelocity) / (range * range);
   const closingVelocity =

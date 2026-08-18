@@ -31,10 +31,10 @@ export function measurementModel(
   sensorHeading: number,
 ): [number, number] {
   const dx = state[0] - sensorPosition.x;
-  const dz = state[1] - sensorPosition.z;
+  const dy = state[1] - sensorPosition.y;
   return [
-    wrapAngle(Math.atan2(dz, dx) - sensorHeading),
-    Math.hypot(dx, dz),
+    wrapAngle(Math.atan2(dy, dx) - sensorHeading),
+    Math.hypot(dx, dy),
   ];
 }
 
@@ -43,12 +43,12 @@ export function measurementJacobian(
   sensorPosition: Vec2,
 ): Matrix {
   const dx = state[0] - sensorPosition.x;
-  const dz = state[1] - sensorPosition.z;
-  const rangeSquared = Math.max(1e-9, dx * dx + dz * dz);
+  const dy = state[1] - sensorPosition.y;
+  const rangeSquared = Math.max(1e-9, dx * dx + dy * dy);
   const range = Math.sqrt(rangeSquared);
   return [
-    [-dz / rangeSquared, dx / rangeSquared, 0, 0],
-    [dx / range, dz / range, 0, 0],
+    [-dy / rangeSquared, dx / rangeSquared, 0, 0],
+    [dx / range, dy / range, 0, 0],
   ];
 }
 
@@ -123,7 +123,7 @@ export class ExtendedKalmanFilter {
         state: [
           observation.sensorPosition.x +
             observation.range * Math.cos(absoluteBearing),
-          observation.sensorPosition.z +
+          observation.sensorPosition.y +
             observation.range * Math.sin(absoluteBearing),
           0,
           0,
@@ -204,8 +204,8 @@ export class ExtendedKalmanFilter {
     const age = timestamp - (this.lastObservationAt ?? this.filter.timestamp);
     const estimate: TrackEstimate = {
       timestamp,
-      position: { x: predicted.state[0], z: predicted.state[1] },
-      velocity: { x: predicted.state[2], z: predicted.state[3] },
+      position: { x: predicted.state[0], y: predicted.state[1] },
+      velocity: { x: predicted.state[2], y: predicted.state[3] },
       covariance: predicted.covariance,
       age,
       valid: age <= this.config.staleAfter,

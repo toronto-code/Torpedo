@@ -5,13 +5,13 @@ import type { NavigationInput } from "../src/sim/types";
 
 const input: NavigationInput = {
   timestamp: 0,
-  ownPosition: { x: 0, z: 0 },
-  ownVelocity: { x: 20, z: 0 },
+  ownPosition: { x: 0, y: 0 },
+  ownVelocity: { x: 20, y: 0 },
   ownHeading: 0,
   track: {
     timestamp: 0,
-    position: { x: 1000, z: 100 },
-    velocity: { x: -5, z: 0 },
+    position: { x: 1000, y: 100 },
+    velocity: { x: -5, y: 0 },
     covariance: Array.from({ length: 4 }, (_, i) =>
       Array.from({ length: 4 }, (_, j) => (i === j ? 1 : 0)),
     ),
@@ -29,8 +29,8 @@ describe("guidance", () => {
         ...input,
         track: {
           ...input.track,
-          position: { x: 1000, z: 0 },
-          velocity: { x: -5, z: 0 },
+          position: { x: 1000, y: 0 },
+          velocity: { x: -5, y: 0 },
         },
       },
       config,
@@ -44,7 +44,7 @@ describe("guidance", () => {
     const command = computeGuidance(
       {
         ...input,
-        track: { ...input.track, velocity: { x: -5, z: 3 } },
+        track: { ...input.track, velocity: { x: -5, y: 3 } },
       },
       config,
     );

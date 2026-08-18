@@ -6,8 +6,8 @@ import type { TrackEstimate } from "../src/sim/types";
 function estimate(overrides: Partial<TrackEstimate> = {}): TrackEstimate {
   return {
     timestamp: 1,
-    position: { x: 10, z: 20 },
-    velocity: { x: 2, z: 1 },
+    position: { x: 10, y: 20 },
+    velocity: { x: 2, y: 1 },
     covariance: [
       [4, 0, 0, 0],
       [0, 4, 0, 0],

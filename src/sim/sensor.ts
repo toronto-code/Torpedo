@@ -54,7 +54,7 @@ export class SeekerModel {
       return { status: "out-of-range", observation: null, acoustic: channel };
     }
     const trueBearing = wrapAngle(
-      Math.atan2(relative.z, relative.x) - sensor.heading,
+      Math.atan2(relative.y, relative.x) - sensor.heading,
     );
     if (Math.abs(trueBearing) > this.config.fovHalfAngle) {
       return { status: "out-of-fov", observation: null, acoustic: channel };
@@ -78,7 +78,7 @@ export class SeekerModel {
       range: Math.max(1, range + this.noise.gaussian(0, rangeSigma)),
       bearingVariance: this.config.bearingSigma ** 2,
       rangeVariance: rangeSigma ** 2,
-      sensorPosition: { x: sensor.position.x, z: sensor.position.z },
+      sensorPosition: { x: sensor.position.x, y: sensor.position.y },
       sensorHeading: sensor.heading,
       acoustic: channel ?? undefined,
     };

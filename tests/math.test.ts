@@ -15,7 +15,7 @@ describe("numerical foundations", () => {
   });
 
   it("computes closest point of approach", () => {
-    const result = cpa({ x: 100, z: 10 }, { x: -10, z: 0 });
+    const result = cpa({ x: 100, y: 10 }, { x: -10, y: 0 });
     expect(result.time).toBeCloseTo(10, 12);
     expect(result.distance).toBeCloseTo(10, 12);
   });

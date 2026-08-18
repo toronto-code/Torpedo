@@ -141,11 +141,11 @@ export class SimulationEngine {
             timestamp: this.timestamp,
             ownPosition: {
               x: this.torpedo.position.x,
-              z: this.torpedo.position.z,
+              y: this.torpedo.position.y,
             },
             ownVelocity: {
               x: this.torpedo.velocity.x,
-              z: this.torpedo.velocity.z,
+              y: this.torpedo.velocity.y,
             },
             ownHeading: this.torpedo.heading,
             track,
@@ -341,6 +341,7 @@ export class SimulationEngine {
       this.torpedo.position.y,
       this.torpedo.position.z,
       this.target.position.x,
+      this.target.position.y,
       this.target.position.z,
       sample.metrics.range,
       this.torpedo.orientation.w,

@@ -44,10 +44,13 @@ function magnitude(value: Vec3): number {
 
 function currentAt(config: SixDofConfig, timestamp: number): Vec3 {
   const phase = TWO_PI * config.currentFrequency * timestamp;
+  // The per-axis phase offsets follow the physical axis, so under the NED
+  // convention East (y) carries the former z-axis phase and Down (z) carries
+  // the former y-axis phase with an inverted amplitude sign.
   return {
     x: config.currentMean.x + config.currentAmplitude.x * Math.sin(phase),
-    y: config.currentMean.y + config.currentAmplitude.y * Math.sin(phase * 0.73 + 1.7),
-    z: config.currentMean.z + config.currentAmplitude.z * Math.sin(phase * 1.17 + 3.1),
+    y: config.currentMean.y + config.currentAmplitude.y * Math.sin(phase * 1.17 + 3.1),
+    z: config.currentMean.z + config.currentAmplitude.z * Math.sin(phase * 0.73 + 1.7),
   };
 }
 
@@ -99,8 +102,8 @@ export function solveSixDofTrim(
   const verticalResidual = buoyancyExcess - heaveCommand * maximumVerticalThrust;
   const buoyancyBody = inverseRotateVector(orientation, {
     x: 0,
-    y: parameters.displacedMass * GRAVITY,
-    z: 0,
+    y: 0,
+    z: -parameters.displacedMass * GRAVITY,
   });
   return {
     converged: required <= parameters.maximumThrust && Math.abs(verticalResidual) < 1e-8,
@@ -110,8 +113,8 @@ export function solveSixDofTrim(
     heaveCommand,
     residualForce: {
       x: propulsionForce - required,
-      y: verticalResidual,
-      z: 0,
+      y: 0,
+      z: verticalResidual,
     },
     residualMoment: cross(parameters.centerOfBuoyancy, buoyancyBody),
   };
@@ -179,8 +182,8 @@ function controlTargets(
   const parameters = config.parameters;
   const worldVelocity = rotateVector(state.orientation, state.bodyVelocity);
   const worldAngularVelocity = rotateVector(state.orientation, state.angularVelocity);
-  const yawRate = -worldAngularVelocity.y;
-  const depthRate = -worldVelocity.y;
+  const yawRate = worldAngularVelocity.z;
+  const depthRate = worldVelocity.z;
   const rawRudder = parameters.yawControllerGain * (control.yawRateCommand - yawRate);
   const buoyancyFeedForward = parameters.actuationModel === "vectored-thrust"
     ? (parameters.displacedMass - parameters.mass) * GRAVITY
@@ -219,25 +222,28 @@ function derivative(
   const relativeVelocity = subtract(state.bodyVelocity, currentBody);
   const q = Math.max(0, relativeVelocity.x * relativeVelocity.x);
   const vectoredThrust = p.actuationModel === "vectored-thrust";
+  // Body frame is NED-style x = surge, y = starboard sway, z = down heave.
+  // The rudder produces a starboard-facing side force; the elevator produces
+  // a vertical (heave) force, nose-down positive for control surfaces.
   const rudderForce = vectoredThrust
     ? 0
     : -p.rudderForceCoefficient * q * state.rudder * config.controlAuthorityScale;
   const elevatorForce = vectoredThrust
-    ? -(p.maximumVerticalThrust ?? 0) * state.elevator * config.controlAuthorityScale
-    : p.elevatorForceCoefficient * q * state.elevator * config.controlAuthorityScale;
+    ? (p.maximumVerticalThrust ?? 0) * state.elevator * config.controlAuthorityScale
+    : -p.elevatorForceCoefficient * q * state.elevator * config.controlAuthorityScale;
   const force = {
     x: state.propulsion + damping(relativeVelocity.x, p.linearDamping.x, p.quadraticDamping.x),
-    y: elevatorForce + damping(relativeVelocity.y, p.linearDamping.y, p.quadraticDamping.y),
-    z: rudderForce + damping(relativeVelocity.z, p.linearDamping.z, p.quadraticDamping.z),
+    y: rudderForce + damping(relativeVelocity.y, p.linearDamping.y, p.quadraticDamping.y),
+    z: elevatorForce + damping(relativeVelocity.z, p.linearDamping.z, p.quadraticDamping.z),
   };
-  const weightBody = inverseRotateVector(state.orientation, { x: 0, y: -p.mass * GRAVITY, z: 0 });
-  const buoyancyBody = inverseRotateVector(state.orientation, { x: 0, y: p.displacedMass * GRAVITY, z: 0 });
+  const weightBody = inverseRotateVector(state.orientation, { x: 0, y: 0, z: p.mass * GRAVITY });
+  const buoyancyBody = inverseRotateVector(state.orientation, { x: 0, y: 0, z: -p.displacedMass * GRAVITY });
   const totalForce = add(force, add(weightBody, buoyancyBody));
   const tailMoment = vectoredThrust
-    ? { x: 0, y: -(p.maximumYawMoment ?? 0) * state.rudder * config.controlAuthorityScale, z: 0 }
+    ? { x: 0, y: 0, z: (p.maximumYawMoment ?? 0) * state.rudder * config.controlAuthorityScale }
     : cross(
       { x: -p.controlMomentArm, y: 0, z: 0 },
-      { x: 0, y: elevatorForce, z: rudderForce },
+      { x: 0, y: rudderForce, z: elevatorForce },
     );
   const restoringMoment = cross(p.centerOfBuoyancy, buoyancyBody);
   const dampingMoment = {
@@ -351,9 +357,9 @@ export function integrateSixDofVehicle(
   const rudder = clamp(decoded.rudder, -maxSurface, maxSurface);
   const elevator = clamp(decoded.elevator, -maxSurface, maxSurface);
   const propulsion = clamp(decoded.propulsion, 0, maximumThrust);
-  const depth = Math.max(0, -decoded.position.y);
-  const depthRate = -worldVelocity.y;
-  const yawRate = -worldAngularVelocity.y;
+  const depth = Math.max(0, decoded.position.z);
+  const depthRate = worldVelocity.z;
+  const yawRate = worldAngularVelocity.z;
   const actuator: ActuatorState = {
     yawRateCommand: control.yawRateCommand,
     depthRateCommand: control.depthRateCommand,
@@ -376,7 +382,7 @@ export function integrateSixDofVehicle(
   };
   return {
     timestamp: vehicleState.timestamp + dt,
-    position: { x: decoded.position.x, y: -depth, z: decoded.position.z },
+    position: { x: decoded.position.x, y: decoded.position.y, z: depth },
     velocity: worldVelocity,
     heading: wrapAngle(angles.heading),
     speed: magnitude(decoded.bodyVelocity),

@@ -116,8 +116,8 @@ export function runNumericalSoak(
   config.runtime.maxTime = durationSeconds;
   config.target.initial.position = {
     x: 100_000,
-    y: -config.target.initial.depth,
-    z: 45_000,
+    y: 45_000,
+    z: config.target.initial.depth,
   };
   config.sensor.maxRange = 200_000;
   config.interceptRadius = 0.1;

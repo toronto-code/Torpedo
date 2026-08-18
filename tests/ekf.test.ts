@@ -12,7 +12,7 @@ import type { SensorObservation } from "../src/sim/types";
 describe("extended Kalman filter", () => {
   it("matches the analytic measurement Jacobian to finite differences", () => {
     const state = [350, -120, 8, 2];
-    const sensor = { x: 40, z: 30 };
+    const sensor = { x: 40, y: 30 };
     const analytic = measurementJacobian(state, sensor);
     const epsilon = 1e-5;
     for (let index = 0; index < 4; index += 1) {
@@ -43,7 +43,7 @@ describe("extended Kalman filter", () => {
       range: 1000,
       bearingVariance: 0.001,
       rangeVariance: 100,
-      sensorPosition: { x: 0, z: 0 },
+      sensorPosition: { x: 0, y: 0 },
       sensorHeading: 0,
     };
     expect(filter.process(observation)).toBe(true);
@@ -69,7 +69,7 @@ describe("extended Kalman filter", () => {
       range: 1000,
       bearingVariance: 0.0004,
       rangeVariance: 64,
-      sensorPosition: { x: 0, z: 0 },
+      sensorPosition: { x: 0, y: 0 },
       sensorHeading: 0,
     };
     filter.process(initial);

@@ -20,9 +20,9 @@ const genericFictional: SixDofParameters = {
   addedInertia: { x: 420, y: 2_800, z: 2_800 },
   linearDamping: { x: 55, y: 900, z: 900 },
   quadraticDamping: { x: 13.5, y: 310, z: 310 },
-  angularLinearDamping: { x: 2_400, y: 5_800, z: 25_000 },
+  angularLinearDamping: { x: 2_400, y: 25_000, z: 5_800 },
   angularQuadraticDamping: { x: 1_100, y: 8_500, z: 8_500 },
-  centerOfBuoyancy: { x: 0, y: 0.12, z: 0 },
+  centerOfBuoyancy: { x: 0, y: 0, z: -0.12 },
   maxControlSurfaceAngle: degrees(24),
   controlSurfaceTimeConstant: 0.18,
   propulsionTimeConstant: 1.1,
@@ -37,19 +37,20 @@ const genericFictional: SixDofParameters = {
 
 // Civilian BlueROV2 Heavy reference set. Mass, inertia, added-mass, and damping
 // values are transcribed from Patrick Ng's 2024 public MS thesis, Table 4.1.
-// Axes are mapped into this simulator's x=surge, y=heave, z=sway convention.
+// Axes are mapped into this simulator's NED body convention of x=surge,
+// y=sway, z=heave (down).
 const blueRov2Heavy2024: SixDofParameters = {
   actuationModel: "vectored-thrust",
   mass: 11.5,
   displacedMass: 11.5 + 6.675 / 9.80665,
   inertia: { x: 0.8571, y: 1, z: 1 },
-  addedMass: { x: 10.77, y: (34.6 + 22.45) / 2, z: 24.86 },
+  addedMass: { x: 10.77, y: 24.86, z: (34.6 + 22.45) / 2 },
   addedInertia: { x: 0.103, y: 0.12, z: 0.12 },
-  linearDamping: { x: 38.95, y: (49.5 + 50.62) / 2, z: 60.11 },
-  quadraticDamping: { x: 31.01, y: (113.86 + 76.69) / 2, z: 36.95 },
+  linearDamping: { x: 38.95, y: 60.11, z: (49.5 + 50.62) / 2 },
+  quadraticDamping: { x: 31.01, y: 36.95, z: (113.86 + 76.69) / 2 },
   angularLinearDamping: { x: 0, y: 0, z: 0 },
   angularQuadraticDamping: { x: 2.08, y: 2.42, z: 2.42 },
-  centerOfBuoyancy: { x: 0, y: 0.028, z: 0 },
+  centerOfBuoyancy: { x: 0, y: 0, z: -0.028 },
   maxControlSurfaceAngle: 1,
   controlSurfaceTimeConstant: 0.12,
   propulsionTimeConstant: 0.2,
@@ -83,7 +84,7 @@ function applyCivilianScenario(config: SimulationConfig): void {
   config.dynamics.model = "six-dof";
   config.runtime.maxTime = 120;
   config.torpedo.initial = {
-    position: { x: 0, y: -20, z: 0 },
+    position: { x: 0, y: 0, z: 20 },
     heading: degrees(12),
     speed: 0.7,
     depth: 20,
@@ -103,7 +104,7 @@ function applyCivilianScenario(config: SimulationConfig): void {
   config.torpedo.commandedSpeed = 1.2;
   config.torpedo.commandedDepth = 15;
   config.target.initial = {
-    position: { x: 75, y: -15, z: 24 },
+    position: { x: 75, y: 24, z: 15 },
     heading: degrees(155),
     speed: 0.35,
     depth: 15,
@@ -136,7 +137,7 @@ function applyCivilianScenario(config: SimulationConfig): void {
 function applyGenericScenario(config: SimulationConfig): void {
   config.runtime.maxTime = 120;
   config.torpedo.initial = {
-    position: { x: 0, y: -35, z: 0 },
+    position: { x: 0, y: 0, z: 35 },
     heading: degrees(18),
     speed: 32,
     depth: 35,
@@ -156,7 +157,7 @@ function applyGenericScenario(config: SimulationConfig): void {
   config.torpedo.commandedSpeed = 40;
   config.torpedo.commandedDepth = 8;
   config.target.initial = {
-    position: { x: 2000, y: -8, z: 650 },
+    position: { x: 2000, y: 650, z: 8 },
     heading: degrees(160),
     speed: 13,
     depth: 8,

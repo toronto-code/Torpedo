@@ -17,7 +17,7 @@ export function createDefaultConfig(): SimulationConfig {
     },
     torpedo: {
       initial: {
-        position: { x: 0, y: -35, z: 0 },
+        position: { x: 0, y: 0, z: 35 },
         heading: degrees(18),
         speed: 32,
         depth: 35,
@@ -39,7 +39,7 @@ export function createDefaultConfig(): SimulationConfig {
     },
     target: {
       initial: {
-        position: { x: 2000, y: -8, z: 650 },
+        position: { x: 2000, y: 650, z: 8 },
         heading: degrees(160),
         speed: 13,
         depth: 8,
@@ -101,9 +101,9 @@ export function createDefaultConfig(): SimulationConfig {
           addedInertia: { x: 420, y: 2_800, z: 2_800 },
           linearDamping: { x: 55, y: 900, z: 900 },
           quadraticDamping: { x: 13.5, y: 310, z: 310 },
-          angularLinearDamping: { x: 2_400, y: 5_800, z: 25_000 },
+          angularLinearDamping: { x: 2_400, y: 25_000, z: 5_800 },
           angularQuadraticDamping: { x: 1_100, y: 8_500, z: 8_500 },
-          centerOfBuoyancy: { x: 0, y: 0.12, z: 0 },
+          centerOfBuoyancy: { x: 0, y: 0, z: -0.12 },
           maxControlSurfaceAngle: degrees(24),
           controlSurfaceTimeConstant: 0.18,
           propulsionTimeConstant: 1.1,
@@ -115,8 +115,8 @@ export function createDefaultConfig(): SimulationConfig {
           yawControllerGain: 2.8,
           depthControllerGain: 0.02,
         },
-        currentMean: { x: 0.35, y: 0, z: -0.2 },
-        currentAmplitude: { x: 0.12, y: 0.03, z: 0.16 },
+        currentMean: { x: 0.35, y: -0.2, z: 0 },
+        currentAmplitude: { x: 0.12, y: 0.16, z: -0.03 },
         currentFrequency: 0.035,
         actuatorLagScale: 1,
         controlAuthorityScale: 1,
@@ -221,9 +221,9 @@ export function validateConfig(config: SimulationConfig): void {
     if (vehicle.initial.speed > vehicle.parameters.maxSpeed) {
       throw new Error(`${vehicleName}.initial.speed exceeds maxSpeed.`);
     }
-    if (Math.abs(vehicle.initial.position.y + vehicle.initial.depth) > 1e-9) {
+    if (Math.abs(vehicle.initial.position.z - vehicle.initial.depth) > 1e-9) {
       throw new Error(
-        `${vehicleName}.initial.position.y must equal negative initial.depth.`,
+        `${vehicleName}.initial.position.z must equal initial.depth (NED down).`,
       );
     }
     nonnegative(`${vehicleName}.commandedSpeed`, vehicle.commandedSpeed);

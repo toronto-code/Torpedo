@@ -21,8 +21,8 @@ export function initialVehicleState(config: VehicleConfig): VehicleState {
     position: { ...config.initial.position },
     velocity: {
       x: direction.x * config.initial.speed,
-      y: 0,
-      z: direction.z * config.initial.speed,
+      y: direction.y * config.initial.speed,
+      z: 0,
     },
     heading: wrapAngle(config.initial.heading),
     speed: config.initial.speed,
@@ -112,7 +112,7 @@ export function integrateVehicle(
 
   const state = [
     vehicle.position.x,
-    vehicle.position.z,
+    vehicle.position.y,
     vehicle.heading,
     vehicle.speed,
     vehicle.depth,
@@ -158,11 +158,11 @@ export function integrateVehicle(
   };
   return {
     timestamp: vehicle.timestamp + dt,
-    position: { x: next[0], y: -depth, z: next[1] },
+    position: { x: next[0], y: next[1], z: depth },
     velocity: {
       x: direction.x * speed,
-      y: depthRate === 0 ? 0 : -depthRate,
-      z: direction.z * speed,
+      y: direction.y * speed,
+      z: depthRate,
     },
     heading,
     speed,
@@ -171,8 +171,8 @@ export function integrateVehicle(
     yawRate,
     dynamicsModel: "planar-2.5d",
     orientation: quaternionFromHeading(heading),
-    bodyVelocity: { x: speed, y: -depthRate, z: 0 },
-    angularVelocity: { x: 0, y: -yawRate, z: 0 },
+    bodyVelocity: { x: speed, y: 0, z: depthRate },
+    angularVelocity: { x: 0, y: 0, z: yawRate },
     actuator,
   };
 }

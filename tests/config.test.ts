@@ -28,8 +28,8 @@ describe("simulation configuration validation", () => {
 
   it("rejects physically inconsistent vehicle configuration", () => {
     const badDepth = createDefaultConfig();
-    badDepth.torpedo.initial.position.y = 0;
-    expect(() => validateConfig(badDepth)).toThrow(/negative initial\.depth/);
+    badDepth.torpedo.initial.position.z = 0;
+    expect(() => validateConfig(badDepth)).toThrow(/initial\.depth/);
 
     const badResponse = createDefaultConfig();
     badResponse.torpedo.parameters.turnResponseTime = 0;

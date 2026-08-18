@@ -1,7 +1,8 @@
 import * as THREE from "three";
 
 import { clamp, wrapAngle } from "../../sim/math";
-import type { RenderSnapshot, Vec3, VehicleState } from "../../sim/types";
+import type { RenderSnapshot, VehicleState } from "../../sim/types";
+import { toRenderHorizontal, toRenderPosition, toRenderQuaternion } from "./coordinates";
 
 export type CameraMode = "tactical" | "chase" | "seeker";
 
@@ -15,10 +16,6 @@ export interface SceneOptions {
 const SNAPSHOT_INTERVAL_MS = 20;
 const TRAIL_LIMIT = 2_000;
 
-function position(value: Vec3): THREE.Vector3 {
-  return new THREE.Vector3(value.x, value.y, value.z);
-}
-
 function interpolateAngle(from: number, to: number, alpha: number): number {
   return from + wrapAngle(to - from) * alpha;
 }
@@ -28,20 +25,10 @@ function interpolateVehicle(
   to: VehicleState,
   alpha: number,
 ): { position: THREE.Vector3; heading: number; orientation: THREE.Quaternion } {
-  const start = new THREE.Quaternion(
-    from.orientation.x,
-    from.orientation.y,
-    from.orientation.z,
-    from.orientation.w,
-  );
-  const end = new THREE.Quaternion(
-    to.orientation.x,
-    to.orientation.y,
-    to.orientation.z,
-    to.orientation.w,
-  );
+  const start = toRenderQuaternion(from.orientation);
+  const end = toRenderQuaternion(to.orientation);
   return {
-    position: position(from.position).lerp(position(to.position), alpha),
+    position: toRenderPosition(from.position).lerp(toRenderPosition(to.position), alpha),
     heading: interpolateAngle(from.heading, to.heading, alpha),
     orientation: start.slerp(end, alpha),
   };
@@ -302,11 +289,11 @@ export class SimulationScene {
     this.current = snapshot;
     this.arrivedAt = performance.now();
     this.lastSequence = snapshot.sequence;
-    this.torpedoTrail.push(position(snapshot.torpedo.position));
-    this.targetTrail.push(position(snapshot.target.position));
+    this.torpedoTrail.push(toRenderPosition(snapshot.torpedo.position));
+    this.targetTrail.push(toRenderPosition(snapshot.target.position));
     if (snapshot.estimate) {
       this.estimateTrail.push(
-        new THREE.Vector3(snapshot.estimate.position.x, snapshot.target.position.y, snapshot.estimate.position.z),
+        toRenderHorizontal(snapshot.estimate.position, toRenderPosition(snapshot.target.position).y),
       );
     }
   }
@@ -316,14 +303,13 @@ export class SimulationScene {
     this.targetTrail.clear();
     this.estimateTrail.clear();
     for (const snapshot of snapshots) {
-      this.torpedoTrail.push(position(snapshot.torpedo.position));
-      this.targetTrail.push(position(snapshot.target.position));
+      this.torpedoTrail.push(toRenderPosition(snapshot.torpedo.position));
+      this.targetTrail.push(toRenderPosition(snapshot.target.position));
       if (snapshot.estimate) {
         this.estimateTrail.push(
-          new THREE.Vector3(
-            snapshot.estimate.position.x,
-            snapshot.target.position.y,
-            snapshot.estimate.position.z,
+          toRenderHorizontal(
+            snapshot.estimate.position,
+            toRenderPosition(snapshot.target.position).y,
           ),
         );
       }
@@ -376,7 +362,7 @@ export class SimulationScene {
     const major = Math.sqrt(Math.max(0.01, (trace + root) * 0.5) * 5.991);
     const minor = Math.sqrt(Math.max(0.01, (trace - root) * 0.5) * 5.991);
     const theta = 0.5 * Math.atan2(2 * b, difference);
-    const center = new THREE.Vector3(estimate.position.x, snapshot.target.position.y + 0.8, estimate.position.z);
+    const center = toRenderHorizontal(estimate.position, toRenderPosition(snapshot.target.position).y + 0.8);
     const points = Array.from({ length: 72 }, (_, index) => {
       const angle = (index / 72) * Math.PI * 2;
       const x = Math.cos(angle) * Math.min(major, 1_500);
@@ -394,23 +380,23 @@ export class SimulationScene {
 
   private updateDiagnostics(snapshot: RenderSnapshot): void {
     const time = snapshot.metrics.predictedTimeToCpa;
-    const ownFuture = position(snapshot.torpedo.position).addScaledVector(position(snapshot.torpedo.velocity), time);
+    const ownFuture = toRenderPosition(snapshot.torpedo.position).addScaledVector(toRenderPosition(snapshot.torpedo.velocity), time);
     const trackPosition = snapshot.estimate
-      ? new THREE.Vector3(snapshot.estimate.position.x, snapshot.target.position.y, snapshot.estimate.position.z)
-      : position(snapshot.target.position);
+      ? toRenderHorizontal(snapshot.estimate.position, toRenderPosition(snapshot.target.position).y)
+      : toRenderPosition(snapshot.target.position);
     const trackVelocity = snapshot.estimate
-      ? new THREE.Vector3(snapshot.estimate.velocity.x, 0, snapshot.estimate.velocity.z)
-      : position(snapshot.target.velocity);
+      ? toRenderHorizontal(snapshot.estimate.velocity, 0)
+      : toRenderPosition(snapshot.target.velocity);
     const targetFuture = trackPosition.clone().addScaledVector(trackVelocity, time);
     this.cpaLine.geometry.dispose();
     this.cpaLine.geometry = new THREE.BufferGeometry().setFromPoints([ownFuture, targetFuture]);
     this.cpaLine.computeLineDistances();
 
     const vectorScale = 8;
-    const observerVelocity = position(snapshot.torpedo.velocity);
+    const observerVelocity = toRenderPosition(snapshot.torpedo.velocity);
     const observerLength = Math.max(0.01, observerVelocity.length() * vectorScale);
     const trackLength = Math.max(0.01, trackVelocity.length() * vectorScale);
-    this.observerVelocity.position.copy(position(snapshot.torpedo.position));
+    this.observerVelocity.position.copy(toRenderPosition(snapshot.torpedo.position));
     this.observerVelocity.setDirection(observerVelocity.normalize());
     this.observerVelocity.setLength(observerLength, Math.min(18, observerLength * 0.18), Math.min(8, observerLength * 0.08));
     this.trackVelocity.position.copy(trackPosition);
@@ -475,7 +461,7 @@ export class SimulationScene {
 
     const estimate = this.current.estimate;
     this.estimate.visible = Boolean(estimate);
-    if (estimate) this.estimate.position.set(estimate.position.x, contact.position.y, estimate.position.z);
+    if (estimate) this.estimate.position.copy(toRenderHorizontal(estimate.position, contact.position.y));
     const observation = this.current.observation;
     this.observation.visible = Boolean(observation);
     if (observation) {
@@ -483,7 +469,7 @@ export class SimulationScene {
       this.observation.position.set(
         observation.sensorPosition.x + Math.cos(bearing) * observation.range,
         contact.position.y,
-        observation.sensorPosition.z + Math.sin(bearing) * observation.range,
+        observation.sensorPosition.y + Math.sin(bearing) * observation.range,
       );
     }
 

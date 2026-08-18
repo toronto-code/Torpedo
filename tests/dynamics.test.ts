@@ -20,7 +20,8 @@ describe("2.5D dynamics", () => {
       0.5,
     );
     expect(next.position.x).toBeCloseTo(trimmedSpeed * 0.5, 8);
-    expect(next.position.z).toBeCloseTo(0, 8);
+    expect(next.position.y).toBeCloseTo(0, 8);
+    expect(next.position.z).toBeCloseTo(initial.depth, 8);
     expect(next.depth).toBeCloseTo(initial.depth, 8);
   });
 

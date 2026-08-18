@@ -20,8 +20,8 @@ export function engagementMetrics(
   const truthPosition = subtract2(target.position, torpedo.position);
   const truthVelocity = subtract2(target.velocity, torpedo.velocity);
   const horizontalRange = magnitude2(truthPosition);
-  const verticalSeparation = target.position.y - torpedo.position.y;
-  const verticalRelativeVelocity = target.velocity.y - torpedo.velocity.y;
+  const verticalSeparation = target.position.z - torpedo.position.z;
+  const verticalRelativeVelocity = target.velocity.z - torpedo.velocity.z;
   const range = Math.max(
     1e-9,
     Math.hypot(horizontalRange, verticalSeparation),
@@ -47,8 +47,8 @@ export function engagementMetrics(
         );
   const predictedHorizontalX =
     predictionPosition.x + predictionVelocity.x * predictedTime;
-  const predictedHorizontalZ =
-    predictionPosition.z + predictionVelocity.z * predictedTime;
+  const predictedHorizontalY =
+    predictionPosition.y + predictionVelocity.y * predictedTime;
   const predictedVertical =
     verticalSeparation + verticalRelativeVelocity * predictedTime;
   const threeDimensionalClosingVelocity =
@@ -61,7 +61,7 @@ export function engagementMetrics(
     horizontalRange,
     verticalSeparation,
     relativeBearing: wrapAngle(
-      Math.atan2(truthPosition.z, truthPosition.x) - torpedo.heading,
+      Math.atan2(truthPosition.y, truthPosition.x) - torpedo.heading,
     ),
     closingVelocity: threeDimensionalClosingVelocity,
     losRate:
@@ -69,7 +69,7 @@ export function engagementMetrics(
       Math.max(1e-9, horizontalRange * horizontalRange),
     predictedMissDistance: Math.hypot(
       predictedHorizontalX,
-      predictedHorizontalZ,
+      predictedHorizontalY,
       predictedVertical,
     ),
     predictedTimeToCpa: predictedTime,
@@ -83,7 +83,7 @@ export function estimationError(
   if (!estimate) return null;
   return Math.hypot(
     estimate.position.x - target.position.x,
-    estimate.position.z - target.position.z,
+    estimate.position.y - target.position.y,
   );
 }
 
@@ -96,9 +96,9 @@ export function normalizedEstimationErrorSquared(
   if (!covarianceInverse) return null;
   const error = [
     target.position.x - estimate.position.x,
-    target.position.z - estimate.position.z,
+    target.position.y - estimate.position.y,
     target.velocity.x - estimate.velocity.x,
-    target.velocity.z - estimate.velocity.z,
+    target.velocity.y - estimate.velocity.y,
   ];
   return quadraticForm(error, covarianceInverse);
 }

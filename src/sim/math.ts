@@ -13,27 +13,27 @@ export function wrapAngle(angle: number): number {
 }
 
 export function add2(a: Vec2, b: Vec2): Vec2 {
-  return { x: a.x + b.x, z: a.z + b.z };
+  return { x: a.x + b.x, y: a.y + b.y };
 }
 
 export function subtract2(a: Vec2, b: Vec2): Vec2 {
-  return { x: a.x - b.x, z: a.z - b.z };
+  return { x: a.x - b.x, y: a.y - b.y };
 }
 
 export function scale2(v: Vec2, scalar: number): Vec2 {
-  return { x: v.x * scalar, z: v.z * scalar };
+  return { x: v.x * scalar, y: v.y * scalar };
 }
 
 export function dot2(a: Vec2, b: Vec2): number {
-  return a.x * b.x + a.z * b.z;
+  return a.x * b.x + a.y * b.y;
 }
 
 export function cross2(a: Vec2, b: Vec2): number {
-  return a.x * b.z - a.z * b.x;
+  return a.x * b.y - a.y * b.x;
 }
 
 export function magnitude2(v: Vec2): number {
-  return Math.hypot(v.x, v.z);
+  return Math.hypot(v.x, v.y);
 }
 
 export function distance2(a: Vec2, b: Vec2): number {
@@ -41,7 +41,7 @@ export function distance2(a: Vec2, b: Vec2): number {
 }
 
 export function headingVector(heading: number): Vec2 {
-  return { x: Math.cos(heading), z: Math.sin(heading) };
+  return { x: Math.cos(heading), y: Math.sin(heading) };
 }
 
 export function isFiniteArray(values: readonly number[]): boolean {

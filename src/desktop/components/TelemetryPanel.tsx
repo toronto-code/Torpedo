@@ -80,10 +80,10 @@ export function TelemetryPanel({ snapshot, config }: Props) {
       </div>
 
       <div className="track-vector">
-        <span>ESTIMATED TRACK · WORLD X–Z</span>
+        <span>ESTIMATED TRACK · NED HORIZONTAL</span>
         <code>
-          P [{value(estimate?.position.x)}, {value(estimate?.position.z)}] m&nbsp;&nbsp;
-          V [{value(estimate?.velocity.x, 2)}, {value(estimate?.velocity.z, 2)}] m/s
+          P [{value(estimate?.position.x)}, {value(estimate?.position.y)}] m&nbsp;&nbsp;
+          V [{value(estimate?.velocity.x, 2)}, {value(estimate?.velocity.y, 2)}] m/s
         </code>
       </div>
 

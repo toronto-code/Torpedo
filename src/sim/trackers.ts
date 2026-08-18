@@ -7,13 +7,13 @@ import type {
 } from "./types";
 
 export class RawObservationTracker {
-  private previous: { timestamp: number; x: number; z: number } | null = null;
+  private previous: { timestamp: number; x: number; y: number } | null = null;
   private current: {
     timestamp: number;
     x: number;
-    z: number;
+    y: number;
     vx: number;
-    vz: number;
+    vy: number;
     covariance: number[][];
   } | null = null;
 
@@ -24,33 +24,33 @@ export class RawObservationTracker {
     const x =
       observation.sensorPosition.x +
       Math.cos(absoluteBearing) * observation.range;
-    const z =
-      observation.sensorPosition.z +
+    const y =
+      observation.sensorPosition.y +
       Math.sin(absoluteBearing) * observation.range;
     const dt = this.previous
       ? observation.observedAt - this.previous.timestamp
       : 0;
     const measuredVx =
       dt > 1e-6 && this.previous ? (x - this.previous.x) / dt : 0;
-    const measuredVz =
-      dt > 1e-6 && this.previous ? (z - this.previous.z) / dt : 0;
+    const measuredVy =
+      dt > 1e-6 && this.previous ? (y - this.previous.y) / dt : 0;
     const alpha = 0.35;
     const vx = this.current
       ? this.current.vx * (1 - alpha) + measuredVx * alpha
       : measuredVx;
-    const vz = this.current
-      ? this.current.vz * (1 - alpha) + measuredVz * alpha
-      : measuredVz;
+    const vy = this.current
+      ? this.current.vy * (1 - alpha) + measuredVy * alpha
+      : measuredVy;
     const positionVariance =
       observation.rangeVariance +
       observation.range ** 2 * observation.bearingVariance;
-    this.previous = { timestamp: observation.observedAt, x, z };
+    this.previous = { timestamp: observation.observedAt, x, y };
     this.current = {
       timestamp: observation.observedAt,
       x,
-      z,
+      y,
       vx,
-      vz,
+      vy,
       covariance: diagonal([
         positionVariance,
         positionVariance,
@@ -67,9 +67,9 @@ export class RawObservationTracker {
       timestamp,
       position: {
         x: this.current.x + this.current.vx * age,
-        z: this.current.z + this.current.vz * age,
+        y: this.current.y + this.current.vy * age,
       },
-      velocity: { x: this.current.vx, z: this.current.vz },
+      velocity: { x: this.current.vx, y: this.current.vy },
       covariance: this.current.covariance,
       age,
       valid: age <= 1.5,
@@ -84,8 +84,8 @@ export function perfectTrack(
 ): TrackEstimate {
   return {
     timestamp,
-    position: { x: target.position.x, z: target.position.z },
-    velocity: { x: target.velocity.x, z: target.velocity.z },
+    position: { x: target.position.x, y: target.position.y },
+    velocity: { x: target.velocity.x, y: target.velocity.y },
     covariance: diagonal([1e-9, 1e-9, 1e-9, 1e-9]),
     age: 0,
     valid: true,
