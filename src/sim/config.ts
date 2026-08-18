@@ -216,6 +216,20 @@ export function validateConfig(config: SimulationConfig): void {
       finite(`${vehicleName}.initial.position.${axis}`, value);
     }
     finite(`${vehicleName}.initial.heading`, vehicle.initial.heading);
+    if (vehicle.initial.pitch !== undefined) {
+      finite(`${vehicleName}.initial.pitch`, vehicle.initial.pitch);
+    }
+    if (vehicle.initial.roll !== undefined) {
+      finite(`${vehicleName}.initial.roll`, vehicle.initial.roll);
+    }
+    if (vehicle.initial.verticalSpeed !== undefined) {
+      finite(`${vehicleName}.initial.verticalSpeed`, vehicle.initial.verticalSpeed);
+    }
+    if (vehicle.dynamicsModel !== undefined) {
+      if (!["planar-2.5d", "six-dof"].includes(vehicle.dynamicsModel)) {
+        throw new Error(`Unknown ${vehicleName}.dynamicsModel.`);
+      }
+    }
     nonnegative(`${vehicleName}.initial.speed`, vehicle.initial.speed);
     nonnegative(`${vehicleName}.initial.depth`, vehicle.initial.depth);
     if (vehicle.initial.speed > vehicle.parameters.maxSpeed) {

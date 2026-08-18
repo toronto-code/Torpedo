@@ -60,6 +60,12 @@ export interface VehicleParameters {
 export interface VehicleInitialState {
   position: Vec3;
   heading: number;
+  /** Optional initial pitch (rad, nose-up positive). */
+  pitch?: number;
+  /** Optional initial roll (rad, starboard-down positive). */
+  roll?: number;
+  /** Optional initial vertical speed (m/s, positive down). */
+  verticalSpeed?: number;
   speed: number;
   depth: number;
 }
@@ -69,6 +75,13 @@ export interface VehicleConfig {
   parameters: VehicleParameters;
   commandedSpeed: number;
   commandedDepth: number;
+  /**
+   * Optional per-vehicle dynamics selection. When absent the vehicle follows
+   * `dynamics.model`. Setting `six-dof` on the tracked target is the opt-in
+   * for full 3D target motion; default scenarios keep the target planar so
+   * paired fidelity studies continue to isolate guided-vehicle fidelity.
+   */
+  dynamicsModel?: DynamicsModel;
 }
 
 export interface SensorConfig {

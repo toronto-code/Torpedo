@@ -3,7 +3,7 @@ import {
   depthRateAutopilot,
   type VehicleControl,
 } from "./dynamics";
-import { createVehicleDynamics, PLANAR_DYNAMICS, type VehicleDynamics } from "./dynamics-model";
+import { createVehicleDynamics, type VehicleDynamics } from "./dynamics-model";
 import { ExtendedKalmanFilter } from "./ekf";
 import { computeGuidance, idleGuidance } from "./guidance";
 import {
@@ -51,6 +51,7 @@ export class SimulationEngine {
   private readonly ekf: ExtendedKalmanFilter;
   private readonly rawTracker = new RawObservationTracker();
   private readonly torpedoDynamics: VehicleDynamics;
+  private readonly targetDynamics: VehicleDynamics;
   private readonly pendingObservations: SensorObservation[] = [];
   private torpedo: VehicleState;
   private target: VehicleState;
@@ -86,9 +87,16 @@ export class SimulationEngine {
       config.runtime.physicsHz / config.runtime.snapshotHz;
     this.telemetryEvery =
       config.runtime.physicsHz / config.runtime.telemetryHz;
-    this.torpedoDynamics = createVehicleDynamics(config.dynamics.model, config.dynamics.sixDof);
+    this.torpedoDynamics = createVehicleDynamics(
+      config.torpedo.dynamicsModel ?? config.dynamics.model,
+      config.dynamics.sixDof,
+    );
+    this.targetDynamics = createVehicleDynamics(
+      config.target.dynamicsModel ?? "planar-2.5d",
+      config.dynamics.sixDof,
+    );
     this.torpedo = this.torpedoDynamics.initialize(config.torpedo);
-    this.target = PLANAR_DYNAMICS.initialize(config.target);
+    this.target = this.targetDynamics.initialize(config.target);
     this.guidance = idleGuidance(
       0,
       config.guidance.law,
@@ -292,7 +300,14 @@ export class SimulationEngine {
         this.config.scenario,
         rangeBefore,
       ),
-      depthRateCommand: 0,
+      depthRateCommand:
+        this.target.dynamicsModel === "six-dof"
+          ? depthRateAutopilot(
+              this.config.target.commandedDepth,
+              this.target,
+              this.config.target.parameters,
+            )
+          : 0,
       speedCommand: this.config.target.commandedSpeed,
     };
     this.torpedo = this.torpedoDynamics.integrate(
@@ -301,7 +316,7 @@ export class SimulationEngine {
       this.config.torpedo,
       this.dt,
     );
-    this.target = PLANAR_DYNAMICS.integrate(
+    this.target = this.targetDynamics.integrate(
       this.target,
       targetControl,
       this.config.target,
@@ -330,7 +345,7 @@ export class SimulationEngine {
     }
     this.controlEffortSum += this.torpedo.actuator.controlEffort;
     this.actuatorTrackingErrorSum += this.torpedo.actuator.trackingError;
-    if (this.config.dynamics.model === "six-dof") {
+    if (this.torpedo.dynamicsModel === "six-dof") {
       const attitude = sixDofAttitude(this.torpedo);
       this.maximumRoll = Math.max(this.maximumRoll, Math.abs(attitude.roll));
       this.maximumPitch = Math.max(this.maximumPitch, Math.abs(attitude.pitch));

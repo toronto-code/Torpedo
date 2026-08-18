@@ -1,5 +1,5 @@
 import { clamp, headingVector, wrapAngle } from "./math";
-import { quaternionFromHeading } from "./quaternion";
+import { quaternionFromEuler, quaternionFromHeading } from "./quaternion";
 import { rk4Step } from "./rk4";
 import type {
   ActuatorState,
@@ -16,22 +16,39 @@ export interface VehicleControl {
 
 export function initialVehicleState(config: VehicleConfig): VehicleState {
   const direction = headingVector(config.initial.heading);
+  const pitch = config.initial.pitch ?? 0;
+  const roll = config.initial.roll ?? 0;
+  const verticalSpeed = config.initial.verticalSpeed ?? 0;
+  // Absent optional 3D fields keep the exact legacy initialization path.
+  const full3d = pitch !== 0 || roll !== 0 || verticalSpeed !== 0;
   return {
     timestamp: 0,
     position: { ...config.initial.position },
-    velocity: {
-      x: direction.x * config.initial.speed,
-      y: direction.y * config.initial.speed,
-      z: 0,
-    },
+    velocity: full3d
+      ? {
+          x: direction.x * config.initial.speed,
+          y: direction.y * config.initial.speed,
+          z: verticalSpeed,
+        }
+      : {
+          x: direction.x * config.initial.speed,
+          y: direction.y * config.initial.speed,
+          z: 0,
+        },
     heading: wrapAngle(config.initial.heading),
     speed: config.initial.speed,
     depth: config.initial.depth,
-    depthRate: 0,
+    depthRate: verticalSpeed,
     yawRate: 0,
     dynamicsModel: "planar-2.5d",
-    orientation: quaternionFromHeading(config.initial.heading),
-    bodyVelocity: { x: config.initial.speed, y: 0, z: 0 },
+    orientation: full3d
+      ? quaternionFromEuler(
+          wrapAngle(config.initial.heading),
+          pitch,
+          roll,
+        )
+      : quaternionFromHeading(config.initial.heading),
+    bodyVelocity: { x: config.initial.speed, y: 0, z: verticalSpeed },
     angularVelocity: { x: 0, y: 0, z: 0 },
     actuator: {
       yawRateCommand: 0,

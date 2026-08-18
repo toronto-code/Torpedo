@@ -4,6 +4,7 @@ import {
   normalizeQuaternion,
   orientationAngles,
   quaternionDerivative,
+  quaternionFromEuler,
   quaternionFromHeading,
   rotateVector,
 } from "./quaternion";
@@ -308,20 +309,35 @@ export function initialSixDofState(
   vehicle: VehicleConfig,
   config: SixDofConfig,
 ): VehicleState {
-  const orientation = quaternionFromHeading(vehicle.initial.heading);
+  const pitch = vehicle.initial.pitch ?? 0;
+  const roll = vehicle.initial.roll ?? 0;
+  const verticalSpeed = vehicle.initial.verticalSpeed ?? 0;
+  // Absent optional 3D fields keep the exact legacy initialization path.
+  const full3d = pitch !== 0 || roll !== 0 || verticalSpeed !== 0;
+  const orientation = full3d
+    ? quaternionFromEuler(wrapAngle(vehicle.initial.heading), pitch, roll)
+    : quaternionFromHeading(vehicle.initial.heading);
   const trim = solveSixDofTrim(vehicle, config);
+  const worldVelocity = full3d
+    ? add(
+        rotateVector(orientation, { x: vehicle.initial.speed, y: 0, z: 0 }),
+        { x: 0, y: 0, z: verticalSpeed },
+      )
+    : rotateVector(orientation, { x: vehicle.initial.speed, y: 0, z: 0 });
   return {
     timestamp: 0,
     position: { ...vehicle.initial.position },
-    velocity: rotateVector(orientation, { x: vehicle.initial.speed, y: 0, z: 0 }),
+    velocity: worldVelocity,
     heading: wrapAngle(vehicle.initial.heading),
     speed: vehicle.initial.speed,
     depth: vehicle.initial.depth,
-    depthRate: 0,
+    depthRate: verticalSpeed,
     yawRate: 0,
     dynamicsModel: "six-dof",
     orientation,
-    bodyVelocity: { x: vehicle.initial.speed, y: 0, z: 0 },
+    bodyVelocity: full3d
+      ? inverseRotateVector(orientation, worldVelocity)
+      : { x: vehicle.initial.speed, y: 0, z: 0 },
     angularVelocity: { x: 0, y: 0, z: 0 },
     actuator: {
       yawRateCommand: 0,

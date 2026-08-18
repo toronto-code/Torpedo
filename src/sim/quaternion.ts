@@ -36,6 +36,30 @@ export function quaternionFromHeading(heading: number): Quaternion {
   return { w: Math.cos(half), x: 0, y: 0, z: Math.sin(half) };
 }
 
+/**
+ * NED aerospace ZYX composition: yaw about Down, then pitch about starboard,
+ * then roll about forward. Pitch is positive nose-up, roll positive
+ * starboard-down.
+ */
+export function quaternionFromEuler(
+  heading: number,
+  pitch: number,
+  roll: number,
+): Quaternion {
+  const cy = Math.cos(heading * 0.5);
+  const sy = Math.sin(heading * 0.5);
+  const cp = Math.cos(pitch * 0.5);
+  const sp = Math.sin(pitch * 0.5);
+  const cr = Math.cos(roll * 0.5);
+  const sr = Math.sin(roll * 0.5);
+  return {
+    w: cr * cp * cy + sr * sp * sy,
+    x: sr * cp * cy - cr * sp * sy,
+    y: cr * sp * cy + sr * cp * sy,
+    z: cr * cp * sy - sr * sp * cy,
+  };
+}
+
 export function rotateVector(value: Quaternion, vector: Vec3): Vec3 {
   const q = normalizeQuaternion(value);
   const pure: Quaternion = { w: 0, x: vector.x, y: vector.y, z: vector.z };
@@ -68,8 +92,10 @@ export function quaternionDerivative(
 
 /**
  * NED Euler extraction with the body frame x = forward, y = starboard,
- * z = down. Heading is atan2(East, North), pitch is positive nose-up, and
- * roll is positive starboard-down about the forward axis.
+ * z = down, using the ZYX (yaw-pitch-roll) convention so that
+ * orientationAngles(quaternionFromEuler(y, p, r)) round-trips exactly.
+ * Heading is atan2(East, North), pitch is positive nose-up, and roll is
+ * positive starboard-down about the forward axis.
  */
 export function orientationAngles(orientation: Quaternion): {
   heading: number;
@@ -77,17 +103,12 @@ export function orientationAngles(orientation: Quaternion): {
   pitch: number;
 } {
   const forward = rotateVector(orientation, { x: 1, y: 0, z: 0 });
-  const up = rotateVector(orientation, { x: 0, y: 0, z: -1 });
+  const starboard = rotateVector(orientation, { x: 0, y: 1, z: 0 });
+  const keel = rotateVector(orientation, { x: 0, y: 0, z: 1 });
   const horizontal = Math.hypot(forward.x, forward.y);
   const heading = Math.atan2(forward.y, forward.x);
   const pitch = Math.atan2(-forward.z, Math.max(1e-15, horizontal));
-  const horizontalRight = horizontal < 1e-12
-    ? { x: 0, y: 1, z: 0 }
-    : { x: -forward.y / horizontal, y: forward.x / horizontal, z: 0 };
-  const roll = Math.atan2(
-    up.x * horizontalRight.x + up.y * horizontalRight.y,
-    clamp(-up.z, -1, 1),
-  );
+  const roll = Math.atan2(starboard.z, keel.z);
   return { heading, roll, pitch };
 }
 
