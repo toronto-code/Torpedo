@@ -18,6 +18,33 @@ Scenario ──> Truth dynamics (200 Hz RK4) ──> Acoustic channel ──> Se
                                                                     └──> truth dynamics
 ```
 
+## Coordinate system
+
+Simulation state uses **NED coordinates**: x = North, y = East, z = Down
+(depth is positive down). Positions are metres, velocities m/s, angular
+rates rad/s internally; the UI converts angles to degrees. The horizontal
+guidance/estimation/sensing boundary (`Vec2`, `TrackEstimate`,
+`NavigationInput`) consumes the (North, East) pair only.
+
+Three.js keeps its native right-handed Y-up rendering space. Exactly one
+conversion layer (`src/desktop/scene/coordinates.ts`) maps between the
+frames — `render.x = sim.x`, `render.y = -sim.z`, `render.z = sim.y` — and
+conjugates orientation quaternions accordingly. It is a proper rotation
+(handedness-preserving); components never perform ad-hoc axis swaps. The
+kernel previously used an x/z-horizontal, y-up convention; the migration
+is a pure relabeling rotation and is regression-verified (see
+Reproducibility).
+
+## Orientation
+
+Quaternions are the canonical internal orientation representation in both
+dynamics models; Euler angles are derived for telemetry and UI only via a
+ZYX NED extraction (`orientationAngles`, inverse of `quaternionFromEuler`).
+The 6-DOF body frame is x = forward, y = starboard, z = down. Procedural
+meshes are built nose-forward along body +X, matching the render
+conversion; an explicit model-orientation adapter would be added only for
+imported meshes with a different forward axis.
+
 ## Timing
 
 | Process | Rate | Physics ticks |
@@ -44,8 +71,20 @@ the ocean, vehicles, trails, seeker field of view, observation and estimate mark
 Worker executes Monte Carlo experiments so statistics cannot block either rendering
 or the authoritative real-time Worker.
 
-The plan display uses the Three.js world X–Z horizontal plane with +Y up; it is not
-an ENU geodetic frame. The grid interval is 100 m. Observer trajectory, estimated
+The 3D scene shows a translucent water surface at zero depth, a seabed at the
+configured `environment.waterDepth`, a depth ruler with metre ticks and labels,
+and exponential fog for vertical perspective. Vehicle trails are bounded
+full-3D ring buffers (default 2,000 points, configurable via `SceneOptions`)
+that preserve vertical separation and never reallocate per point. Four camera
+modes are available: **Orbit** (default; rotate, zoom, pan, double-click to
+refocus the engagement midpoint), **Chase** (smoothed follow behind/above the
+observer), **Top Down** (the orthographic tactical view), and **Seeker**
+(onboard first-person, gated by lock status). Camera selection and all camera
+state live purely in React/scene state; there is no path into
+`SimulationConfig`, its hash, or the Worker.
+
+The plan display uses the NED frame through the single conversion layer
+described above. The grid interval is 100 m. Observer trajectory, estimated
 track, delivered measurement, 95% position covariance, velocity vectors, and CPA
 geometry have separate symbology. The UI's tentative/confirmed/coasting/stale/
 rejected track-quality label is derived only from published estimate age, validity,
@@ -73,8 +112,17 @@ delayed measurement as though it were current.
 The authoritative timestep is 0.005 seconds. A `VehicleDynamics` interface selects
 the validated planar baseline or the 6-DOF implementation without
 changing sensing, estimation, guidance, scheduling, telemetry, or rendering
-contracts. The surface target remains planar in both cases so the experiment
-isolates guided-vehicle fidelity.
+contracts.
+
+The tracked target is planar by default. Setting the optional
+`target.dynamicsModel` to `six-dof` is the explicit opt-in for full 3D
+target motion: the engine then integrates the target through the same
+6-DOF model and drives it toward its commanded depth with a depth
+autopilot. `VehicleInitialState` also accepts optional `pitch`, `roll`,
+and `verticalSpeed` (positive down). The opt-in exists because the paired
+2.5D/6-DOF fidelity studies deliberately keep the target planar to
+isolate guided-vehicle fidelity; default scenarios must keep producing
+their previous trajectories.
 
 The planar model integrates horizontal position, heading, speed, positive-down
 depth, depth rate, and yaw rate. Speed, turn, and depth commands pass through
@@ -91,8 +139,10 @@ published diagonal coefficients for low-speed comparison. A bounded numerical tr
 level propulsion equilibrium and reports residual force and moment.
 
 The seeker and horizontal EKF continue to use horizontal bearing/range in both
-models. Depth is controlled by an independent outer loop toward a fictional
-submerged target reference point; in 6-DOF that demand drives the elevator rather
+models; those subsystems form the documented planar adapter boundary at the
+`Vec2`/`TrackEstimate` interfaces and consume North/East components only.
+Depth is controlled by an independent outer loop toward the
+configured depth reference; in 6-DOF that demand drives the elevator rather
 than directly prescribing vertical motion. Intercept,
 truth range, closing velocity, and closest approach use full three-dimensional
 geometry, so horizontal coincidence at the wrong depth is not counted as success.
@@ -117,6 +167,15 @@ Every run has a seed and stable configuration hash. Sensor noise and sensor drop
 use independently derived random streams, so adding draws to one subsystem does not
 silently alter the other. Headless and rendered runs share the same
 `SimulationEngine`.
+
+Backward compatibility across the NED coordinate migration is enforced by
+`tests/ned-regression.test.ts` against golden fixtures captured from the
+pre-migration kernel: planar scenarios reproduce bit-identically and 6-DOF
+runs agree to floating-point round-off (measured worst case 4.5e-13 m against
+a documented 1e-9 absolute tolerance, consistent with the project's 1e-10
+relative determinism basis). Pre-migration six-DOF configuration data
+(center-of-buoyancy, currents) is not portable across the convention change;
+no persisted artifacts in this repository depend on it.
 
 Stage 4 adds a `ReplayRecorder` at the desktop runtime boundary. It records the
 already-decimated 50 Hz snapshots and 20 Hz telemetry, so recording does not widen

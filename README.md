@@ -8,7 +8,8 @@
 An engineering portfolio project about **guidance and state estimation under
 sensor uncertainty**. The simulator is a native desktop application, not a hosted
 website. Its deterministic kernel provides selectable validated 2.5D and 6-DOF
-vehicle dynamics, with an optional published civilian BlueROV2 Heavy reference profile,
+vehicle dynamics in **NED coordinates** (x = North, y = East, z = Down), with an
+optional published civilian BlueROV2 Heavy reference profile,
 a limited-FOV noisy seeker, raw tracking, an Extended
 Kalman Filter, pure pursuit, proportional navigation, ablation runs, and CSV
 telemetry. An optional software-only acoustic channel adds configurable water-column
@@ -16,13 +17,16 @@ properties, analytic spreading and absorption, a synthetic echo link budget,
 probability of detection, and two-way propagation latency.
 
 This repository does not model or claim correspondence to operational hardware.
-The default experience uses the original synthetic high-speed configuration with
-two visible vehicles and an optional 6-DOF sensitivity model. A civilian ROV
+The default interactive experience opens the full 3D setup: 6-DOF dynamics,
+a water surface and seabed with a depth ruler, 3D trails, and an orbit camera
+(alongside chase, top-down, and seeker views). The original synthetic
+high-speed configuration with two visible vehicles remains the headless
+default, and a civilian ROV
 coefficient profile remains available for low-speed comparison. The purpose is
 numerical methods, estimator consistency, control limits, and reproducible experimentation.
 
 The native interface is organized as two engineering workspaces. **Simulation**
-contains a world X–Z plan view, configuration manifest, explicit observer/track/
+contains the 3D world view with camera modes, a configuration manifest, explicit observer/track/
 measurement/covariance symbology, estimator-quality state, measurement provenance,
 and an immutable run record. **Analysis** contains paired synthetic experiments,
 the model-qualification basis, and replay/audit evidence. Track-quality labels are
@@ -61,8 +65,10 @@ available on `PATH` (or supplied with `--ffmpeg /absolute/path/to/ffmpeg`).
 The authoritative Worker advances at 200 Hz with fixed-step RK4. Autopilot runs
 at 100 Hz, guidance and render snapshots at 50 Hz, and telemetry at 20 Hz. The
 Three.js display interpolates snapshots at display refresh rate and cannot advance
-simulation state. Seeker observations retain their measurement timestamp and are
-delivered after modeled latency.
+simulation state; camera modes, overlays, and trails are render-only state.
+Seeker observations retain their measurement timestamp and are
+delivered after modeled latency. Simulation coordinates are NED; a single
+documented conversion layer maps them into the Three.js render frame.
 
 See [docs/architecture.md](docs/architecture.md) for the runtime boundary and
 timing model, [docs/phase-3-report.md](docs/phase-3-report.md) for the desktop
@@ -101,14 +107,21 @@ All modes use identical scenario and sensor seeds for paired comparisons.
 - Long-run numerical soak checks with finite-state containment
 - Phase 5 replaceable 6-DOF rigid-body model, trim solver, and current disturbances
 - Phase 6 paired 2.5D/6-DOF study with actuator-lag and authority isolation sweeps
+- NED coordinate kernel with a single Three.js conversion layer and golden
+  behavioral regression against the pre-migration kernel (planar runs
+  bit-identical, 6-DOF within floating-point round-off)
+- Opt-in full 3D tracked-target motion behind per-vehicle dynamics selection
+- 3D environment: water surface, seabed at the configured depth, depth ruler,
+  exponential-fog perspective, and bounded allocation-free 3D trails
+- Orbit, Chase, Top Down, and Seeker cameras as render-only state
 - Native model controls, full-attitude rendering, fidelity analysis, and JSON/CSV exports
 - Deterministic reference configuration with verified MP4, GIF, and poster artifacts
-- Technical orthographic plan view with interpolated 50 Hz snapshots
 - Two-workspace engineering UI, tabular experiment manifests, synchronized plots, diagnostic geometry, and native exports
 - Measurement IDs and timestamps, latency provenance, innovation/gate status, and display-only track-quality states
 - Frozen configuration hashes, versioned event counts, qualification basis, and explicit synthetic-model boundary
 - Configurable synthetic acoustic environment with sound speed, absorption, link budget, detection probability, and propagation delay
 - Software-only simulated sensor/navigation stream with no hardware, live network, or external targeting interface
 - Raw, summary, histogram, empirical CDF, and JSON experiment exports
-- Numerical, sensor-distribution, EKF, guidance, determinism, and regression tests
+- Numerical, sensor-distribution, EKF, guidance, determinism, NED-conversion,
+  trail, camera-isolation, and regression tests
 - No hosted website
