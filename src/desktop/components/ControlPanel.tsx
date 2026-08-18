@@ -118,7 +118,18 @@ export function ControlPanel(props: Props) {
             { value: "planar-2.5d", label: "2.5D" },
             { value: "six-dof", label: "6-DOF" },
           ]}
-          onChange={(value) => update((draft) => { draft.dynamics.model = value; })}
+          onChange={(value) => update((draft) => { draft.dynamics.model = value; draft.torpedo.dynamicsModel = value; })}
+          disabled={configLocked}
+        />
+
+        <label>TRACKED-OBJECT MOTION</label>
+        <Choice<DynamicsModel>
+          value={props.config.target.dynamicsModel ?? "planar-2.5d"}
+          values={[
+            { value: "planar-2.5d", label: "PLANAR" },
+            { value: "six-dof", label: "3D" },
+          ]}
+          onChange={(value) => update((draft) => { draft.target.dynamicsModel = value; })}
           disabled={configLocked}
         />
 

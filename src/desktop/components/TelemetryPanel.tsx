@@ -1,5 +1,5 @@
 import { orientationAngles } from "../../sim/quaternion";
-import type { RenderSnapshot, SimulationConfig } from "../../sim/types";
+import type { RenderSnapshot, SimulationConfig, VehicleState } from "../../sim/types";
 import { classifyTrackQuality } from "../trackQuality";
 
 interface Props {
@@ -25,6 +25,25 @@ function Metric({ label, value: display, unit }: { label: string; value: string;
 
 function Evidence({ label, children }: { label: string; children: React.ReactNode }) {
   return <div><span>{label}</span><strong>{children}</strong></div>;
+}
+
+function VehicleStateTable({ label, vehicle }: { label: string; vehicle: VehicleState }) {
+  const attitude = orientationAngles(vehicle.orientation);
+  return (
+    <div className="vehicle-state">
+      <div className="table-subtitle">{label}</div>
+      <div className="metric-grid">
+        <Metric label="NORTH" value={value(vehicle.position.x)} unit="m" />
+        <Metric label="EAST" value={value(vehicle.position.y)} unit="m" />
+        <Metric label="DEPTH" value={value(vehicle.depth)} unit="m" />
+        <Metric label="SPEED" value={value(vehicle.speed)} unit="m/s" />
+        <Metric label="VERTICAL SPEED" value={value(vehicle.depthRate, 2)} unit="m/s" />
+        <Metric label="YAW" value={value(degrees(attitude.heading), 1)} unit="deg" />
+        <Metric label="PITCH" value={value(degrees(attitude.pitch), 2)} unit="deg" />
+        <Metric label="ROLL" value={value(degrees(attitude.roll), 2)} unit="deg" />
+      </div>
+    </div>
+  );
 }
 
 export function TelemetryPanel({ snapshot, config }: Props) {
@@ -63,7 +82,9 @@ export function TelemetryPanel({ snapshot, config }: Props) {
       </div>
 
       <div className="metric-grid">
-        <Metric label="SLANT RANGE" value={value(metrics?.range)} unit="m" />
+        <Metric label="3D SEPARATION" value={value(metrics?.range)} unit="m" />
+        <Metric label="HORIZONTAL SEPARATION" value={value(metrics?.horizontalRange)} unit="m" />
+        <Metric label="DEPTH DIFFERENCE" value={value(metrics?.verticalSeparation)} unit="m" />
         <Metric label="RELATIVE BEARING" value={value(metrics ? degrees(metrics.relativeBearing) : null, 2)} unit="deg" />
         <Metric label="CLOSING RATE" value={value(metrics?.closingVelocity, 2)} unit="m/s" />
         <Metric label="LINE-OF-SIGHT RATE" value={value(metrics ? degrees(metrics.losRate) : null, 3)} unit="deg/s" />
@@ -78,6 +99,13 @@ export function TelemetryPanel({ snapshot, config }: Props) {
         <Metric label="ROLL" value={value(attitude ? degrees(attitude.roll) : null, 2)} unit="deg" />
         <Metric label="PITCH" value={value(attitude ? degrees(attitude.pitch) : null, 2)} unit="deg" />
       </div>
+
+      {snapshot && (
+        <div className="vehicle-state-stack">
+          <VehicleStateTable label="OBSERVER VEHICLE" vehicle={snapshot.torpedo} />
+          <VehicleStateTable label="TRACKED OBJECT" vehicle={snapshot.target} />
+        </div>
+      )}
 
       <div className="track-vector">
         <span>ESTIMATED TRACK · NED HORIZONTAL</span>
