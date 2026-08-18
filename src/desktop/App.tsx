@@ -13,6 +13,7 @@ import { FidelityPanel } from "./components/FidelityPanel";
 import { MiniPlot } from "./components/MiniPlot";
 import { ReplayTimeline } from "./components/ReplayTimeline";
 import { SimulationViewport } from "./components/SimulationViewport";
+import type { CameraMode } from "./scene/SimulationScene";
 import { TelemetryPanel } from "./components/TelemetryPanel";
 import { exportText } from "./export";
 import { runFidelityAnalysis } from "./fidelityAnalysis";
@@ -24,7 +25,14 @@ const degrees = (value: number) => (value * 180) / Math.PI;
 
 export function App() {
   const [runtime, view] = useSimulation();
-  const [config, setConfig] = useState<SimulationConfig>(createDefaultConfig);
+  // The interactive default is the full 3D experience: six-DOF dynamics with
+  // the orbit camera. Headless/reference configurations remain planar.
+  const [config, setConfig] = useState<SimulationConfig>(() => {
+    const initial = createDefaultConfig();
+    initial.dynamics.model = "six-dof";
+    return initial;
+  });
+  const [cameraMode, setCameraMode] = useState<CameraMode>("orbit");
   const [timeScale, setTimeScale] = useState(1);
   const [showTruth, setShowTruth] = useState(true);
   const [showDiagnostics, setShowDiagnostics] = useState(true);
@@ -274,14 +282,31 @@ export function App() {
         <section className="visual-stage">
           <SimulationViewport
             snapshot={displaySnapshot}
-            cameraMode="tactical"
+            cameraMode={cameraMode}
             showTruth={showTruth}
             showDiagnostics={showDiagnostics}
             fovHalfAngle={config.sensor.fovHalfAngle}
+            waterDepth={config.environment?.waterDepth}
+            trailLimit={2_000}
             replayHistory={replayHistory}
           />
+          <div className="camera-select" role="group" aria-label="Camera mode">
+            {(["orbit", "chase", "tactical", "seeker"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className={cameraMode === mode ? "selected" : ""}
+                onClick={() => {
+                  runtime.recordUserEvent("camera-change", { mode });
+                  setCameraMode(mode);
+                }}
+              >
+                {mode === "orbit" ? "ORBIT" : mode === "chase" ? "CHASE" : mode === "tactical" ? "TOP DOWN" : "SEEKER"}
+              </button>
+            ))}
+          </div>
           <div className="view-overlay top-left">
-            <span>PLAN VIEW · WORLD X–Z · +Y UP · GRID 100 m</span>
+            <span>NED · +X NORTH · +Y EAST · +Z DOWN · GRID 100 m</span>
             <strong>T+ {(displaySnapshot?.timestamp ?? 0).toFixed(3)} s</strong>
           </div>
           <div className="view-overlay bottom-left">
@@ -292,7 +317,7 @@ export function App() {
             <span className="legend covariance">95% POSITION COVARIANCE</span>
           </div>
           <div className="frame-indicator" aria-label="World coordinate frame">
-            <i className="axis-z">+Z</i><i className="axis-x">+X</i><b />
+            <i className="axis-z">+E</i><i className="axis-x">+N</i><b />
           </div>
           {view.error && <div className="error-banner">SIMULATION HALTED — {view.error}</div>}
           {displayResult && (

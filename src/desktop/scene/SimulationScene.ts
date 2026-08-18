@@ -1,75 +1,77 @@
 import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 import { clamp, wrapAngle } from "../../sim/math";
 import type { RenderSnapshot, VehicleState } from "../../sim/types";
-import { toRenderHorizontal, toRenderPosition, toRenderQuaternion } from "./coordinates";
+import {
+  toRenderHorizontalInto,
+  toRenderPositionInto,
+  toRenderQuaternionInto,
+} from "./coordinates";
+import { Trail } from "./trail";
 
-export type CameraMode = "tactical" | "chase" | "seeker";
+export type CameraMode = "orbit" | "chase" | "tactical" | "seeker";
 
 export interface SceneOptions {
   cameraMode: CameraMode;
   showTruth: boolean;
   showDiagnostics: boolean;
   fovHalfAngle: number;
+  /** Water column depth in metres used for the seabed plane. Default 500. */
+  waterDepth?: number;
+  /** Maximum points retained per trail. Default 2,000. */
+  trailLimit?: number;
 }
 
 const SNAPSHOT_INTERVAL_MS = 20;
-const TRAIL_LIMIT = 2_000;
+const DEFAULT_WATER_DEPTH = 500;
+const DEFAULT_TRAIL_LIMIT = 2_000;
+const WORLD_EXTENT = 12_000;
+
+const scratchFromPosition = new THREE.Vector3();
+const scratchToPosition = new THREE.Vector3();
+const scratchFromQuaternion = new THREE.Quaternion();
+const scratchToQuaternion = new THREE.Quaternion();
+const scratchForward = new THREE.Vector3();
+const scratchCenter = new THREE.Vector3();
+const scratchDesired = new THREE.Vector3();
 
 function interpolateAngle(from: number, to: number, alpha: number): number {
   return from + wrapAngle(to - from) * alpha;
 }
 
-function interpolateVehicle(
+interface InterpolatedVehicle {
+  position: THREE.Vector3;
+  heading: number;
+  orientation: THREE.Quaternion;
+}
+
+const ownInterpolated: InterpolatedVehicle = {
+  position: new THREE.Vector3(),
+  heading: 0,
+  orientation: new THREE.Quaternion(),
+};
+
+const contactInterpolated: InterpolatedVehicle = {
+  position: new THREE.Vector3(),
+  heading: 0,
+  orientation: new THREE.Quaternion(),
+};
+
+function interpolateVehicleInto(
   from: VehicleState,
   to: VehicleState,
   alpha: number,
-): { position: THREE.Vector3; heading: number; orientation: THREE.Quaternion } {
-  const start = toRenderQuaternion(from.orientation);
-  const end = toRenderQuaternion(to.orientation);
-  return {
-    position: toRenderPosition(from.position).lerp(toRenderPosition(to.position), alpha),
-    heading: interpolateAngle(from.heading, to.heading, alpha),
-    orientation: start.slerp(end, alpha),
-  };
-}
-
-class Trail {
-  readonly line: THREE.Line;
-  private readonly points: THREE.Vector3[] = [];
-
-  constructor(color: number, opacity = 0.9) {
-    this.line = new THREE.Line(
-      new THREE.BufferGeometry(),
-      new THREE.LineBasicMaterial({
-        color,
-        transparent: true,
-        opacity,
-        depthWrite: false,
-      }),
-    );
-    this.line.frustumCulled = false;
-  }
-
-  push(next: THREE.Vector3): void {
-    const previous = this.points.at(-1);
-    if (previous && previous.distanceToSquared(next) < 0.16) return;
-    this.points.push(next.clone());
-    if (this.points.length > TRAIL_LIMIT) this.points.shift();
-    this.line.geometry.dispose();
-    this.line.geometry = new THREE.BufferGeometry().setFromPoints(this.points);
-  }
-
-  clear(): void {
-    this.points.length = 0;
-    this.line.geometry.dispose();
-    this.line.geometry = new THREE.BufferGeometry();
-  }
-
-  dispose(): void {
-    this.line.geometry.dispose();
-    (this.line.material as THREE.Material).dispose();
-  }
+  result: InterpolatedVehicle,
+): InterpolatedVehicle {
+  toRenderQuaternionInto(from.orientation, scratchFromQuaternion);
+  toRenderQuaternionInto(to.orientation, scratchToQuaternion);
+  toRenderPositionInto(from.position, scratchFromPosition);
+  toRenderPositionInto(to.position, scratchToPosition);
+  result.position.copy(scratchFromPosition).lerp(scratchToPosition, alpha);
+  result.heading = interpolateAngle(from.heading, to.heading, alpha);
+  result.orientation.copy(scratchFromQuaternion).slerp(scratchToQuaternion, alpha);
+  return result;
 }
 
 function createVehicle(color: number, target = false): THREE.Group {
@@ -161,18 +163,120 @@ function createMarker(color: number, radius: number): THREE.Mesh {
   );
 }
 
-function createReferencePlane(): THREE.Mesh {
-  const geometry = new THREE.PlaneGeometry(12_000, 12_000);
-  geometry.rotateX(-Math.PI / 2);
-  const material = new THREE.MeshBasicMaterial({ color: 0x15191b, depthWrite: false });
-  return new THREE.Mesh(geometry, material);
+function disposeObject(object: THREE.Object3D): void {
+  object.traverse((child) => {
+    if (
+      child instanceof THREE.Mesh ||
+      child instanceof THREE.Line ||
+      child instanceof THREE.LineSegments ||
+      child instanceof THREE.Sprite
+    ) {
+      child.geometry?.dispose();
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) {
+        if (material instanceof THREE.SpriteMaterial) material.map?.dispose();
+        material?.dispose();
+      }
+    }
+  });
+}
+
+function createDepthLabel(text: string): THREE.Sprite {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 96;
+  const context = canvas.getContext("2d")!;
+  context.fillStyle = "rgba(10, 26, 32, 0.0)";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.font = "600 52px ui-monospace, monospace";
+  context.fillStyle = "#8fb3bd";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(text, canvas.width / 2, canvas.height / 2);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }),
+  );
+  sprite.scale.set(110, 41, 1);
+  return sprite;
+}
+
+/**
+ * Lightweight 3D environment: a translucent water surface at zero depth, a
+ * seabed at the configured water depth, and a vertical depth ruler with
+ * ticks and metre labels at the origin. Exponential fog provides depth
+ * perspective without any per-frame simulation cost.
+ */
+function buildEnvironment(waterDepth: number): THREE.Group {
+  const group = new THREE.Group();
+  const seabedY = -Math.max(50, waterDepth);
+
+  const surface = new THREE.Mesh(
+    new THREE.PlaneGeometry(WORLD_EXTENT, WORLD_EXTENT),
+    new THREE.MeshStandardMaterial({
+      color: 0x1c4a5c,
+      transparent: true,
+      opacity: 0.3,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      roughness: 0.9,
+    }),
+  );
+  surface.rotation.x = -Math.PI / 2;
+  group.add(surface);
+
+  const surfaceGrid = new THREE.GridHelper(WORLD_EXTENT, 120, 0x5d8496, 0x24404e);
+  surfaceGrid.position.y = 0.6;
+  (surfaceGrid.material as THREE.Material).transparent = true;
+  (surfaceGrid.material as THREE.Material).opacity = 0.5;
+  group.add(surfaceGrid);
+
+  const seabed = new THREE.Mesh(
+    new THREE.PlaneGeometry(WORLD_EXTENT, WORLD_EXTENT),
+    new THREE.MeshStandardMaterial({ color: 0x2f2a21, roughness: 1 }),
+  );
+  seabed.rotation.x = -Math.PI / 2;
+  seabed.position.y = seabedY;
+  group.add(seabed);
+
+  const seabedGrid = new THREE.GridHelper(WORLD_EXTENT, 60, 0x4a4234, 0x27231d);
+  seabedGrid.position.y = seabedY + 0.6;
+  (seabedGrid.material as THREE.Material).transparent = true;
+  (seabedGrid.material as THREE.Material).opacity = 0.4;
+  group.add(seabedGrid);
+
+  const rulerVertices: number[] = [];
+  const tickSpacing = 25;
+  for (let depth = 0; depth <= -seabedY; depth += tickSpacing) {
+    const major = depth % 100 === 0;
+    const length = major ? 70 : 28;
+    const y = -depth;
+    rulerVertices.push(0, y, 0, length, y, 0);
+    if (major && depth > 0) {
+      const label = createDepthLabel(`−${depth} m`);
+      label.position.set(length + 70, y, 0);
+      group.add(label);
+    }
+  }
+  const ruler = new THREE.LineSegments(
+    new THREE.BufferGeometry().setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(rulerVertices, 3),
+    ),
+    new THREE.LineBasicMaterial({ color: 0x6c8189, transparent: true, opacity: 0.85 }),
+  );
+  group.add(ruler);
+  return group;
 }
 
 export class SimulationScene {
   private readonly scene = new THREE.Scene();
   private readonly renderer: THREE.WebGLRenderer;
-  private readonly perspective = new THREE.PerspectiveCamera(52, 1, 0.5, 20_000);
-  private readonly tactical = new THREE.OrthographicCamera(-1000, 1000, 700, -700, 1, 20_000);
+  private readonly perspective = new THREE.PerspectiveCamera(52, 1, 0.5, 40_000);
+  private readonly tactical = new THREE.OrthographicCamera(-1000, 1000, 700, -700, 1, 40_000);
+  private readonly orbitCamera = new THREE.PerspectiveCamera(52, 1, 2, 40_000);
+  private readonly orbitControls: OrbitControls;
   private readonly torpedo = createVehicle(0x7cf7df);
   private readonly target = createVehicle(0xe7b97c, true);
   private readonly estimate = createMarker(0x53b8ff, 8);
@@ -182,10 +286,13 @@ export class SimulationScene {
     new THREE.BufferGeometry(),
     new THREE.LineBasicMaterial({ color: 0x53b8ff, transparent: true, opacity: 0.85 }),
   );
+  private readonly covariancePoints = new Float32Array(72 * 3);
   private readonly cpaLine = new THREE.Line(
     new THREE.BufferGeometry(),
     new THREE.LineDashedMaterial({ color: 0xff7d68, dashSize: 15, gapSize: 8, opacity: 0.75, transparent: true }),
   );
+  private readonly cpaPoints = new Float32Array(6);
+  private readonly cpaDistances = new Float32Array(2);
   private readonly observerVelocity = new THREE.ArrowHelper(
     new THREE.Vector3(1, 0, 0),
     new THREE.Vector3(),
@@ -202,10 +309,10 @@ export class SimulationScene {
     10,
     5,
   );
-  private readonly referencePlane = createReferencePlane();
-  private readonly torpedoTrail = new Trail(0x7cf7df);
-  private readonly targetTrail = new Trail(0xe7b97c, 0.7);
-  private readonly estimateTrail = new Trail(0x53b8ff, 0.7);
+  private environment: THREE.Group;
+  private readonly torpedoTrail: Trail;
+  private readonly targetTrail: Trail;
+  private readonly estimateTrail: Trail;
   private readonly resizeObserver: ResizeObserver;
   private animationFrame = 0;
   private previous: RenderSnapshot | null = null;
@@ -224,19 +331,33 @@ export class SimulationScene {
     this.renderer.domElement.setAttribute("aria-label", "Three-dimensional simulation view");
     host.appendChild(this.renderer.domElement);
 
-    this.scene.background = new THREE.Color(0x111415);
-    const ambient = new THREE.HemisphereLight(0xc6cccf, 0x151719, 1.15);
+    this.scene.background = new THREE.Color(0x0d1418);
+    this.scene.fog = new THREE.FogExp2(0x0e1c24, 0.00004);
+    const ambient = new THREE.HemisphereLight(0xc6cccf, 0x1a2a33, 1.2);
     const sun = new THREE.DirectionalLight(0xd9dddf, 1.35);
     sun.position.set(-800, 1400, 500);
-    this.scene.add(ambient, sun, this.referencePlane);
+    this.environment = buildEnvironment(options.waterDepth ?? DEFAULT_WATER_DEPTH);
 
-    const grid = new THREE.GridHelper(12_000, 120, 0x4d5559, 0x2b3033);
-    grid.position.y = -0.3;
-    (grid.material as THREE.Material).transparent = true;
-    (grid.material as THREE.Material).opacity = 0.68;
+    this.torpedoTrail = new Trail({ color: 0x7cf7df, limit: options.trailLimit ?? DEFAULT_TRAIL_LIMIT });
+    this.targetTrail = new Trail({ color: 0xe7b97c, opacity: 0.7, limit: options.trailLimit ?? DEFAULT_TRAIL_LIMIT });
+    this.estimateTrail = new Trail({ color: 0x53b8ff, opacity: 0.7, limit: options.trailLimit ?? DEFAULT_TRAIL_LIMIT });
+
+    const covarianceAttribute = new THREE.BufferAttribute(this.covariancePoints, 3);
+    covarianceAttribute.setUsage(THREE.DynamicDrawUsage);
+    this.covariance.geometry.setAttribute("position", covarianceAttribute);
+
+    const cpaAttribute = new THREE.BufferAttribute(this.cpaPoints, 3);
+    cpaAttribute.setUsage(THREE.DynamicDrawUsage);
+    this.cpaLine.geometry.setAttribute("position", cpaAttribute);
+    const cpaDistanceAttribute = new THREE.BufferAttribute(this.cpaDistances, 1);
+    cpaDistanceAttribute.setUsage(THREE.DynamicDrawUsage);
+    this.cpaLine.geometry.setAttribute("lineDistance", cpaDistanceAttribute);
+
     const axes = new THREE.AxesHelper(240);
     this.scene.add(
-      grid,
+      ambient,
+      sun,
+      this.environment,
       axes,
       this.torpedo,
       this.target,
@@ -256,15 +377,63 @@ export class SimulationScene {
     this.target.visible = options.showTruth;
     updateSeekerSector(this.seeker, options.fovHalfAngle);
 
+    this.orbitControls = new OrbitControls(this.orbitCamera, this.renderer.domElement);
+    this.orbitControls.enableDamping = true;
+    this.orbitControls.dampingFactor = 0.08;
+    this.orbitControls.minDistance = 50;
+    this.orbitControls.maxDistance = 18_000;
+    this.orbitControls.maxPolarAngle = Math.PI - 0.02;
+    this.orbitControls.enabled = false;
+    this.orbitCamera.position.set(-900, 700, -900);
+    this.orbitControls.target.set(0, -40, 0);
+    this.renderer.domElement.addEventListener("dblclick", () => {
+      if (this.options.cameraMode === "orbit") this.focusOrbit();
+    });
+
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(host);
     this.animate = this.animate.bind(this);
     this.animationFrame = requestAnimationFrame(this.animate);
   }
 
+  /** Re-centers the orbit camera on the current engagement midpoint. */
+  focusOrbit(): void {
+    if (!this.current) return;
+    toRenderPositionInto(this.current.torpedo.position, scratchFromPosition);
+    toRenderPositionInto(this.current.target.position, scratchToPosition);
+    scratchCenter.copy(scratchFromPosition).lerp(scratchToPosition, 0.5);
+    const separation = Math.max(
+      300,
+      scratchFromPosition.distanceTo(scratchToPosition),
+    );
+    const direction = scratchDesired
+      .copy(this.orbitCamera.position)
+      .sub(this.orbitControls.target)
+      .normalize();
+    if (!Number.isFinite(direction.x) || direction.lengthSq() < 0.5) {
+      direction.set(-0.55, 0.45, -0.7).normalize();
+    }
+    this.orbitControls.target.copy(scratchCenter);
+    this.orbitCamera.position.copy(scratchCenter).addScaledVector(direction, separation * 1.15 + 260);
+    this.orbitControls.update();
+  }
+
   setOptions(options: SceneOptions): void {
     if (options.fovHalfAngle !== this.options.fovHalfAngle) {
       updateSeekerSector(this.seeker, options.fovHalfAngle);
+    }
+    const waterDepth = options.waterDepth ?? DEFAULT_WATER_DEPTH;
+    if (waterDepth !== (this.options.waterDepth ?? DEFAULT_WATER_DEPTH)) {
+      disposeObject(this.environment);
+      this.scene.remove(this.environment);
+      this.environment = buildEnvironment(waterDepth);
+      this.scene.add(this.environment);
+    }
+    const trailLimit = options.trailLimit ?? DEFAULT_TRAIL_LIMIT;
+    if (trailLimit !== (this.options.trailLimit ?? DEFAULT_TRAIL_LIMIT)) {
+      this.torpedoTrail.setLimit(trailLimit);
+      this.targetTrail.setLimit(trailLimit);
+      this.estimateTrail.setLimit(trailLimit);
     }
     this.options = options;
   }
@@ -289,12 +458,13 @@ export class SimulationScene {
     this.current = snapshot;
     this.arrivedAt = performance.now();
     this.lastSequence = snapshot.sequence;
-    this.torpedoTrail.push(toRenderPosition(snapshot.torpedo.position));
-    this.targetTrail.push(toRenderPosition(snapshot.target.position));
+    toRenderPositionInto(snapshot.torpedo.position, scratchFromPosition);
+    this.torpedoTrail.push(scratchFromPosition.x, scratchFromPosition.y, scratchFromPosition.z);
+    toRenderPositionInto(snapshot.target.position, scratchToPosition);
+    this.targetTrail.push(scratchToPosition.x, scratchToPosition.y, scratchToPosition.z);
     if (snapshot.estimate) {
-      this.estimateTrail.push(
-        toRenderHorizontal(snapshot.estimate.position, toRenderPosition(snapshot.target.position).y),
-      );
+      toRenderHorizontalInto(snapshot.estimate.position, scratchToPosition.y, scratchDesired);
+      this.estimateTrail.push(scratchDesired.x, scratchDesired.y, scratchDesired.z);
     }
   }
 
@@ -303,15 +473,13 @@ export class SimulationScene {
     this.targetTrail.clear();
     this.estimateTrail.clear();
     for (const snapshot of snapshots) {
-      this.torpedoTrail.push(toRenderPosition(snapshot.torpedo.position));
-      this.targetTrail.push(toRenderPosition(snapshot.target.position));
+      toRenderPositionInto(snapshot.torpedo.position, scratchFromPosition);
+      this.torpedoTrail.push(scratchFromPosition.x, scratchFromPosition.y, scratchFromPosition.z);
+      toRenderPositionInto(snapshot.target.position, scratchToPosition);
+      this.targetTrail.push(scratchToPosition.x, scratchToPosition.y, scratchToPosition.z);
       if (snapshot.estimate) {
-        this.estimateTrail.push(
-          toRenderHorizontal(
-            snapshot.estimate.position,
-            toRenderPosition(snapshot.target.position).y,
-          ),
-        );
+        toRenderHorizontalInto(snapshot.estimate.position, scratchToPosition.y, scratchDesired);
+        this.estimateTrail.push(scratchDesired.x, scratchDesired.y, scratchDesired.z);
       }
     }
   }
@@ -319,16 +487,11 @@ export class SimulationScene {
   dispose(): void {
     cancelAnimationFrame(this.animationFrame);
     this.resizeObserver.disconnect();
+    this.orbitControls.dispose();
     this.torpedoTrail.dispose();
     this.targetTrail.dispose();
     this.estimateTrail.dispose();
-    this.scene.traverse((object) => {
-      if (object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.LineSegments) {
-        object.geometry?.dispose();
-        const materials = Array.isArray(object.material) ? object.material : [object.material];
-        for (const material of materials) material?.dispose();
-      }
-    });
+    disposeObject(this.scene);
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
@@ -339,6 +502,8 @@ export class SimulationScene {
     this.renderer.setSize(width, height, false);
     this.perspective.aspect = width / height;
     this.perspective.updateProjectionMatrix();
+    this.orbitCamera.aspect = width / height;
+    this.orbitCamera.updateProjectionMatrix();
     const aspect = width / height;
     this.tactical.left = -1000 * aspect;
     this.tactical.right = 1000 * aspect;
@@ -362,46 +527,101 @@ export class SimulationScene {
     const major = Math.sqrt(Math.max(0.01, (trace + root) * 0.5) * 5.991);
     const minor = Math.sqrt(Math.max(0.01, (trace - root) * 0.5) * 5.991);
     const theta = 0.5 * Math.atan2(2 * b, difference);
-    const center = toRenderHorizontal(estimate.position, toRenderPosition(snapshot.target.position).y + 0.8);
-    const points = Array.from({ length: 72 }, (_, index) => {
+    toRenderPositionInto(snapshot.target.position, scratchToPosition);
+    const centerY = scratchToPosition.y + 0.8;
+    const cosTheta = Math.cos(theta);
+    const sinTheta = Math.sin(theta);
+    const points = this.covariancePoints;
+    for (let index = 0; index < 72; index += 1) {
       const angle = (index / 72) * Math.PI * 2;
       const x = Math.cos(angle) * Math.min(major, 1_500);
       const z = Math.sin(angle) * Math.min(minor, 1_500);
-      return new THREE.Vector3(
-        center.x + x * Math.cos(theta) - z * Math.sin(theta),
-        center.y,
-        center.z + x * Math.sin(theta) + z * Math.cos(theta),
-      );
-    });
-    this.covariance.geometry.dispose();
-    this.covariance.geometry = new THREE.BufferGeometry().setFromPoints(points);
+      points[index * 3] = estimate.position.x + x * cosTheta - z * sinTheta;
+      points[index * 3 + 1] = centerY;
+      points[index * 3 + 2] = estimate.position.y + x * sinTheta + z * cosTheta;
+    }
+    (this.covariance.geometry.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
     this.covariance.visible = true;
   }
 
   private updateDiagnostics(snapshot: RenderSnapshot): void {
     const time = snapshot.metrics.predictedTimeToCpa;
-    const ownFuture = toRenderPosition(snapshot.torpedo.position).addScaledVector(toRenderPosition(snapshot.torpedo.velocity), time);
-    const trackPosition = snapshot.estimate
-      ? toRenderHorizontal(snapshot.estimate.position, toRenderPosition(snapshot.target.position).y)
-      : toRenderPosition(snapshot.target.position);
-    const trackVelocity = snapshot.estimate
-      ? toRenderHorizontal(snapshot.estimate.velocity, 0)
-      : toRenderPosition(snapshot.target.velocity);
-    const targetFuture = trackPosition.clone().addScaledVector(trackVelocity, time);
-    this.cpaLine.geometry.dispose();
-    this.cpaLine.geometry = new THREE.BufferGeometry().setFromPoints([ownFuture, targetFuture]);
-    this.cpaLine.computeLineDistances();
+    toRenderPositionInto(snapshot.torpedo.position, scratchFromPosition);
+    toRenderPositionInto(snapshot.torpedo.velocity, scratchToPosition);
+    const ownFutureX = scratchFromPosition.x + scratchToPosition.x * time;
+    const ownFutureY = scratchFromPosition.y + scratchToPosition.y * time;
+    const ownFutureZ = scratchFromPosition.z + scratchToPosition.z * time;
+
+    let trackX: number;
+    let trackY: number;
+    let trackZ: number;
+    let trackVelocityX: number;
+    let trackVelocityY: number;
+    let trackVelocityZ: number;
+    if (snapshot.estimate) {
+      trackX = snapshot.estimate.position.x;
+      trackZ = snapshot.estimate.position.y;
+      trackVelocityX = snapshot.estimate.velocity.x;
+      trackVelocityZ = snapshot.estimate.velocity.y;
+      toRenderPositionInto(snapshot.target.position, scratchCenter);
+      trackY = scratchCenter.y;
+      trackVelocityY = 0;
+    } else {
+      toRenderPositionInto(snapshot.target.position, scratchCenter);
+      trackX = scratchCenter.x;
+      trackY = scratchCenter.y;
+      trackZ = scratchCenter.z;
+      toRenderPositionInto(snapshot.target.velocity, scratchDesired);
+      trackVelocityX = scratchDesired.x;
+      trackVelocityY = scratchDesired.y;
+      trackVelocityZ = scratchDesired.z;
+    }
+
+    const targetFutureX = trackX + trackVelocityX * time;
+    const targetFutureY = trackY + trackVelocityY * time;
+    const targetFutureZ = trackZ + trackVelocityZ * time;
+    this.cpaPoints[0] = ownFutureX;
+    this.cpaPoints[1] = ownFutureY;
+    this.cpaPoints[2] = ownFutureZ;
+    this.cpaPoints[3] = targetFutureX;
+    this.cpaPoints[4] = targetFutureY;
+    this.cpaPoints[5] = targetFutureZ;
+    const cpaLength = Math.hypot(
+      targetFutureX - ownFutureX,
+      targetFutureY - ownFutureY,
+      targetFutureZ - ownFutureZ,
+    );
+    this.cpaDistances[0] = 0;
+    this.cpaDistances[1] = cpaLength;
+    (this.cpaLine.geometry.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
+    (this.cpaLine.geometry.getAttribute("lineDistance") as THREE.BufferAttribute).needsUpdate = true;
 
     const vectorScale = 8;
-    const observerVelocity = toRenderPosition(snapshot.torpedo.velocity);
-    const observerLength = Math.max(0.01, observerVelocity.length() * vectorScale);
-    const trackLength = Math.max(0.01, trackVelocity.length() * vectorScale);
-    this.observerVelocity.position.copy(toRenderPosition(snapshot.torpedo.position));
-    this.observerVelocity.setDirection(observerVelocity.normalize());
-    this.observerVelocity.setLength(observerLength, Math.min(18, observerLength * 0.18), Math.min(8, observerLength * 0.08));
-    this.trackVelocity.position.copy(trackPosition);
-    this.trackVelocity.setDirection(trackVelocity.normalize());
-    this.trackVelocity.setLength(trackLength, Math.min(18, trackLength * 0.18), Math.min(8, trackLength * 0.08));
+    const observerSpeed = Math.hypot(
+      scratchToPosition.x,
+      scratchToPosition.y,
+      scratchToPosition.z,
+    );
+    const trackSpeed = Math.hypot(trackVelocityX, trackVelocityY, trackVelocityZ);
+    const observerLength = Math.max(0.01, observerSpeed * vectorScale);
+    const trackLength = Math.max(0.01, trackSpeed * vectorScale);
+    this.observerVelocity.position.copy(scratchFromPosition);
+    scratchForward.copy(scratchToPosition).normalize();
+    this.observerVelocity.setDirection(scratchForward);
+    this.observerVelocity.setLength(
+      observerLength,
+      Math.min(18, observerLength * 0.18),
+      Math.min(8, observerLength * 0.08),
+    );
+    scratchDesired.set(trackVelocityX, trackVelocityY, trackVelocityZ);
+    scratchCenter.set(trackX, trackY, trackZ);
+    this.trackVelocity.position.copy(scratchCenter);
+    this.trackVelocity.setDirection(scratchDesired.normalize());
+    this.trackVelocity.setLength(
+      trackLength,
+      Math.min(18, trackLength * 0.18),
+      Math.min(8, trackLength * 0.08),
+    );
     this.cpaLine.visible = this.options.showDiagnostics;
     this.observerVelocity.visible = this.options.showDiagnostics;
     this.trackVelocity.visible = this.options.showDiagnostics;
@@ -413,31 +633,54 @@ export class SimulationScene {
     targetPosition: THREE.Vector3,
     orientation: THREE.Quaternion,
   ): THREE.Camera {
-    const forward = new THREE.Vector3(1, 0, 0).applyQuaternion(orientation).normalize();
+    if (this.options.cameraMode === "orbit") {
+      if (!this.orbitControls.enabled) {
+        this.orbitControls.enabled = true;
+        this.focusOrbit();
+      }
+      this.orbitControls.update();
+      return this.orbitCamera;
+    }
+    this.orbitControls.enabled = false;
+
     if (this.options.cameraMode === "tactical") {
-      const center = ownPosition.clone().lerp(targetPosition, 0.5);
+      scratchCenter.copy(ownPosition).lerp(targetPosition, 0.5);
       const separation = Math.max(700, ownPosition.distanceTo(targetPosition) * 0.72);
       const aspect = Math.max(0.5, this.host.clientWidth / Math.max(1, this.host.clientHeight));
       this.tactical.left = -separation * aspect;
       this.tactical.right = separation * aspect;
       this.tactical.top = separation;
       this.tactical.bottom = -separation;
-      this.tactical.position.set(center.x, Math.max(1200, separation * 1.9), center.z);
+      this.tactical.position.set(scratchCenter.x, Math.max(1200, separation * 1.9), scratchCenter.z);
       this.tactical.up.set(0, 0, -1);
-      this.tactical.lookAt(center);
+      this.tactical.lookAt(scratchCenter);
       this.tactical.updateProjectionMatrix();
       return this.tactical;
     }
+
+    scratchForward.set(1, 0, 0).applyQuaternion(orientation).normalize();
     if (this.options.cameraMode === "seeker") {
-      this.perspective.position.copy(ownPosition).addScaledVector(forward, 18).add(new THREE.Vector3(0, 1.4, 0));
+      this.perspective.position.copy(ownPosition).addScaledVector(scratchForward, 18);
+      this.perspective.position.y += 1.4;
       this.perspective.up.set(0, 1, 0);
-      this.perspective.lookAt(this.perspective.position.clone().addScaledVector(forward, 800));
+      this.perspective.lookAt(
+        scratchCenter.copy(this.perspective.position).addScaledVector(scratchForward, 800),
+      );
       this.target.visible = snapshot.seekerStatus === "locked" || this.options.showTruth;
       return this.perspective;
     }
-    this.perspective.position.copy(ownPosition).addScaledVector(forward, -85).add(new THREE.Vector3(0, 36, 0));
+
+    // Chase: follow the observer from behind and above with smooth
+    // interpolation that never feeds back into simulation state.
+    scratchDesired
+      .copy(ownPosition)
+      .addScaledVector(scratchForward, -85);
+    scratchDesired.y += 36;
+    this.perspective.position.lerp(scratchDesired, 0.12);
     this.perspective.up.set(0, 1, 0);
-    this.perspective.lookAt(ownPosition.clone().addScaledVector(forward, 110));
+    this.perspective.lookAt(
+      scratchCenter.copy(ownPosition).addScaledVector(scratchForward, 110),
+    );
     return this.perspective;
   }
 
@@ -448,8 +691,8 @@ export class SimulationScene {
       return;
     }
     const alpha = clamp((now - this.arrivedAt) / SNAPSHOT_INTERVAL_MS, 0, 1);
-    const own = interpolateVehicle(this.previous.torpedo, this.current.torpedo, alpha);
-    const contact = interpolateVehicle(this.previous.target, this.current.target, alpha);
+    const own = interpolateVehicleInto(this.previous.torpedo, this.current.torpedo, alpha, ownInterpolated);
+    const contact = interpolateVehicleInto(this.previous.target, this.current.target, alpha, contactInterpolated);
     this.torpedo.position.copy(own.position);
     this.torpedo.quaternion.copy(own.orientation);
     this.target.position.copy(contact.position);
@@ -461,7 +704,10 @@ export class SimulationScene {
 
     const estimate = this.current.estimate;
     this.estimate.visible = Boolean(estimate);
-    if (estimate) this.estimate.position.copy(toRenderHorizontal(estimate.position, contact.position.y));
+    if (estimate) {
+      toRenderHorizontalInto(estimate.position, contact.position.y, scratchDesired);
+      this.estimate.position.copy(scratchDesired);
+    }
     const observation = this.current.observation;
     this.observation.visible = Boolean(observation);
     if (observation) {

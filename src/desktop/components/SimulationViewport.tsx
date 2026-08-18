@@ -13,6 +13,8 @@ interface Props {
   showTruth: boolean;
   showDiagnostics: boolean;
   fovHalfAngle: number;
+  waterDepth?: number;
+  trailLimit?: number;
   replayHistory?: RenderSnapshot[];
 }
 
@@ -27,12 +29,15 @@ export function SimulationViewport(props: Props) {
       showTruth: props.showTruth,
       showDiagnostics: props.showDiagnostics,
       fovHalfAngle: props.fovHalfAngle,
+      waterDepth: props.waterDepth,
+      trailLimit: props.trailLimit,
     };
     scene.current = new SimulationScene(host.current, options);
     return () => {
       scene.current?.dispose();
       scene.current = null;
     };
+    // The scene is created once; later changes flow through setOptions.
   }, []);
 
   useEffect(() => {
@@ -46,8 +51,17 @@ export function SimulationViewport(props: Props) {
       showTruth: props.showTruth,
       showDiagnostics: props.showDiagnostics,
       fovHalfAngle: props.fovHalfAngle,
+      waterDepth: props.waterDepth,
+      trailLimit: props.trailLimit,
     });
-  }, [props.cameraMode, props.fovHalfAngle, props.showDiagnostics, props.showTruth]);
+  }, [
+    props.cameraMode,
+    props.fovHalfAngle,
+    props.showDiagnostics,
+    props.showTruth,
+    props.waterDepth,
+    props.trailLimit,
+  ]);
 
   return <div className="simulation-viewport" ref={host} />;
 }

@@ -23,6 +23,11 @@ export function toRenderPosition(value: Vec3): THREE.Vector3 {
   return new THREE.Vector3(value.x, -value.z, value.y);
 }
 
+/** Allocation-free variant for per-frame hot paths. */
+export function toRenderPositionInto(value: Vec3, target: THREE.Vector3): THREE.Vector3 {
+  return target.set(value.x, -value.z, value.y);
+}
+
 export function toRenderDirection(value: Vec3): THREE.Vector3 {
   return toRenderPosition(value);
 }
@@ -32,8 +37,25 @@ export function toRenderHorizontal(value: Vec2, renderY: number): THREE.Vector3 
   return new THREE.Vector3(value.x, renderY, value.y);
 }
 
+export function toRenderHorizontalInto(
+  value: Vec2,
+  renderY: number,
+  target: THREE.Vector3,
+): THREE.Vector3 {
+  return target.set(value.x, renderY, value.y);
+}
+
 export function toRenderQuaternion(value: Quaternion): THREE.Quaternion {
   return new THREE.Quaternion(value.x, value.y, value.z, value.w)
+    .premultiply(C)
+    .multiply(C_INVERSE);
+}
+
+export function toRenderQuaternionInto(
+  value: Quaternion,
+  target: THREE.Quaternion,
+): THREE.Quaternion {
+  return target.set(value.x, value.y, value.z, value.w)
     .premultiply(C)
     .multiply(C_INVERSE);
 }
