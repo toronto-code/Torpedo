@@ -26,7 +26,7 @@ export function App() {
   const [runtime, view] = useSimulation();
   const [config, setConfig] = useState<SimulationConfig>(createDefaultConfig);
   const [timeScale, setTimeScale] = useState(1);
-  const [showTruth, setShowTruth] = useState(false);
+  const [showTruth, setShowTruth] = useState(true);
   const [showDiagnostics, setShowDiagnostics] = useState(true);
   const [workspace, setWorkspace] = useState<"simulation" | "analysis">("simulation");
   const [analysisRuns, setAnalysisRuns] = useState(8);
@@ -231,7 +231,7 @@ export function App() {
           <span className="system-mark">GEL</span>
           <div>
             <h1>UNDERWATER VEHICLE TRACKING SIMULATOR</h1>
-            <span className="eyebrow">{config.dynamics.sixDof.profile === "bluerov2-heavy-2024" ? "PUBLISHED CIVILIAN ROV REFERENCE · RESEARCH MODEL" : "FICTIONAL SENSITIVITY COEFFICIENTS · RESEARCH MODEL"}</span>
+            <span className="eyebrow">{config.dynamics.sixDof.profile === "bluerov2-heavy-2024" ? "OPTIONAL CIVILIAN REFERENCE · RESEARCH MODEL" : "SYNTHETIC HIGH-SPEED DYNAMICS · RESEARCH MODEL"}</span>
           </div>
         </div>
         <nav className="workspace-switch" aria-label="Workspace">
@@ -297,7 +297,7 @@ export function App() {
           {view.error && <div className="error-banner">SIMULATION HALTED — {view.error}</div>}
           {displayResult && (
             <div className={`result-banner ${displayResult.terminationReason}`}>
-              <strong>{displayResult.terminationReason === "intercept" ? "RENDEZVOUS" : displayResult.terminationReason.toUpperCase()}</strong>
+              <strong>{displayResult.terminationReason === "intercept" ? "INTERCEPT" : displayResult.terminationReason.toUpperCase()}</strong>
               <span>closest approach {displayResult.closestApproach.toFixed(2)} m</span>
               <span>elapsed {displayResult.elapsedTime.toFixed(2)} s</span>
               <span>saturation {(displayResult.saturationFraction * 100).toFixed(1)}%</span>
@@ -394,7 +394,7 @@ export function App() {
                 <div><dt>NUMERICAL EVIDENCE</dt><dd>Finite-state soak, replay digest, RK4 regression tests</dd></div>
                 <div><dt>ESTIMATOR EVIDENCE</dt><dd>NIS, NEES, covariance coverage, innovation gating</dd></div>
                 <div><dt>ACOUSTIC EVIDENCE</dt><dd>Analytic spreading, Thorp absorption, Mackenzie sound speed, seeded detection</dd></div>
-                <div><dt>HYDRODYNAMIC BASIS</dt><dd>{config.dynamics.sixDof.profile === "bluerov2-heavy-2024" ? "BlueROV2 Heavy civilian reference · Ng 2024" : "Generic Fossen-style structure · fictional coefficients"}</dd></div>
+                <div><dt>HYDRODYNAMIC BASIS</dt><dd>{config.dynamics.sixDof.profile === "bluerov2-heavy-2024" ? "Optional BlueROV2 Heavy civilian reference · Ng 2024" : "Generic Fossen-style structure · synthetic coefficients"}</dd></div>
                 <div><dt>ACTUATION BASIS</dt><dd>{config.dynamics.sixDof.parameters.actuationModel === "vectored-thrust" ? "Reduced vectored-thrust allocation" : "Generic control surfaces"}</dd></div>
                 <div><dt>FIELD CALIBRATION</dt><dd>None</dd></div>
                 <div><dt>LIVE SENSOR INTERFACE</dt><dd>None</dd></div>

@@ -85,9 +85,9 @@ body linear velocity, body angular velocity, rudder and elevator state, and
 propulsion state. It uses diagonal rigid and added mass/inertia, gravity, buoyancy,
 quadratic and linear damping, restoring moment from the center-of-buoyancy offset,
 control-surface or reduced vectored-thrust forces/moments, propulsion lag, and a
-deterministic time-varying current. The default profile uses published civilian
-BlueROV2 Heavy diagonal coefficients; the archived generic profile retains fictional
-sensitivity parameters. A bounded numerical trim solver establishes initial
+deterministic time-varying current. The default experience uses the generic
+high-speed synthetic profile; an optional civilian BlueROV2 Heavy profile provides
+published diagonal coefficients for low-speed comparison. A bounded numerical trim solver establishes initial
 level propulsion equilibrium and reports residual force and moment.
 
 The seeker and horizontal EKF continue to use horizontal bearing/range in both

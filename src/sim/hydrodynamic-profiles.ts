@@ -67,8 +67,8 @@ const blueRov2Heavy2024: SixDofParameters = {
 export const HYDRODYNAMIC_PROFILES: Record<HydrodynamicProfileId, HydrodynamicProfile> = {
   "generic-fictional": {
     id: "generic-fictional",
-    label: "Generic sensitivity model",
-    basis: "Fictional diagonal coefficients",
+    label: "Generic high-speed model",
+    basis: "Synthetic diagonal coefficients",
     parameters: genericFictional,
   },
   "bluerov2-heavy-2024": {

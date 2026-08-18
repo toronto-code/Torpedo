@@ -2,7 +2,7 @@
 
 ## Scope
 
-The default 6-DOF profile is a software-only civilian BlueROV2 Heavy reference.
+The optional civilian 6-DOF profile is a software-only BlueROV2 Heavy reference.
 It makes numerical experiments dimensionally and dynamically more credible without
 adding weapon-platform data. It is not a complete digital twin, manufacturer-certified
 model, or field-qualified controller.

@@ -8,7 +8,7 @@
 An engineering portfolio project about **guidance and state estimation under
 sensor uncertainty**. The simulator is a native desktop application, not a hosted
 website. Its deterministic kernel provides selectable validated 2.5D and 6-DOF
-vehicle dynamics, including a published civilian BlueROV2 Heavy reference profile,
+vehicle dynamics, with an optional published civilian BlueROV2 Heavy reference profile,
 a limited-FOV noisy seeker, raw tracking, an Extended
 Kalman Filter, pure pursuit, proportional navigation, ablation runs, and CSV
 telemetry. An optional software-only acoustic channel adds configurable water-column
@@ -16,10 +16,10 @@ properties, analytic spreading and absorption, a synthetic echo link budget,
 probability of detection, and two-way propagation latency.
 
 This repository does not model or claim correspondence to operational hardware.
-The default 6-DOF profile uses published civilian ROV coefficients; the archived
-high-speed demonstration retains an explicitly fictional sensitivity profile. The
-purpose is numerical methods, estimator consistency, control limits, and reproducible
-experimentation.
+The default experience uses the original synthetic high-speed configuration with
+two visible vehicles and an optional 6-DOF sensitivity model. A civilian ROV
+coefficient profile remains available for low-speed comparison. The purpose is
+numerical methods, estimator consistency, control limits, and reproducible experimentation.
 
 The native interface is organized as two engineering workspaces. **Simulation**
 contains a world X–Z plan view, configuration manifest, explicit observer/track/

@@ -1,0 +1,187 @@
+diff --git a/src/sim/index.ts b/src/sim/index.ts
+index 9b052da..5252ace 100644
+--- a/src/sim/index.ts
++++ b/src/sim/index.ts
+@@ -1,5 +1,16 @@
+ export { createDefaultConfig, createPortfolioDemoConfig, hashConfig, validateConfig } from "./config";
+ export { acousticChannel, soundSpeedMackenzie, thorpAbsorptionDbPerKm } from "./acoustics";
++export {
++  RESEARCH_INTERFACE_CAPABILITIES,
++  RecordedSensorPlayback,
++  SYNTHETIC_ACOUSTIC_SIGNATURES,
++  syntheticRelativeLevelDb,
++} from "./research-interfaces";
++export type {
++  RecordedSensorFrame,
++  SyntheticAcousticBand,
++  SyntheticAcousticSignature,
++} from "./research-interfaces";
+ export { telemetryToCsv } from "./csv";
+ export { SimulationEngine, runHeadless } from "./engine";
+ export { ExtendedKalmanFilter } from "./ekf";
+--- /dev/null	2026-08-16 23:17:06
++++ src/sim/research-interfaces.ts	2026-08-16 23:16:21
+@@ -0,0 +1,106 @@
++/**
++ * Non-operational research fixtures for reproducible acoustic experiments.
++ *
++ * This module intentionally exposes recorded-data playback only. It contains no
++ * transport discovery, network/serial access, actuator messages, or live control.
++ */
++
++export interface SyntheticAcousticBand {
++  centerFrequencyHz: number;
++  relativeLevelDb: number;
++  bandwidthHz: number;
++}
++
++export interface SyntheticAcousticSignature {
++  id: "quiet-electric-rov" | "survey-thruster-lab";
++  basis: "synthetic-non-identifying";
++  broadbandFloorDb: number;
++  bands: readonly SyntheticAcousticBand[];
++}
++
++export const SYNTHETIC_ACOUSTIC_SIGNATURES: Record<
++  SyntheticAcousticSignature["id"],
++  SyntheticAcousticSignature
++> = {
++  "quiet-electric-rov": {
++    id: "quiet-electric-rov",
++    basis: "synthetic-non-identifying",
++    broadbandFloorDb: -32,
++    bands: [
++      { centerFrequencyHz: 120, relativeLevelDb: -12, bandwidthHz: 18 },
++      { centerFrequencyHz: 360, relativeLevelDb: -18, bandwidthHz: 42 },
++    ],
++  },
++  "survey-thruster-lab": {
++    id: "survey-thruster-lab",
++    basis: "synthetic-non-identifying",
++    broadbandFloorDb: -24,
++    bands: [
++      { centerFrequencyHz: 90, relativeLevelDb: -8, bandwidthHz: 22 },
++      { centerFrequencyHz: 270, relativeLevelDb: -14, bandwidthHz: 55 },
++    ],
++  },
++};
++
++export function syntheticRelativeLevelDb(
++  signature: SyntheticAcousticSignature,
++  frequencyHz: number,
++): number {
++  if (!Number.isFinite(frequencyHz) || frequencyHz < 0) {
++    throw new Error("frequencyHz must be finite and nonnegative.");
++  }
++  let linearPower = 10 ** (signature.broadbandFloorDb / 10);
++  for (const band of signature.bands) {
++    const normalizedOffset =
++      (frequencyHz - band.centerFrequencyHz) / Math.max(1, band.bandwidthHz);
++    linearPower += 10 ** (band.relativeLevelDb / 10) * Math.exp(-0.5 * normalizedOffset ** 2);
++  }
++  return 10 * Math.log10(linearPower);
++}
++
++export interface RecordedSensorFrame<TPayload = unknown> {
++  timestamp: number;
++  payload: TPayload;
++}
++
++export const RESEARCH_INTERFACE_CAPABILITIES = Object.freeze({
++  mode: "recorded-playback" as const,
++  liveIo: false as const,
++  actuatorCommands: false as const,
++  externalTargeting: false as const,
++});
++
++/** Deterministic playback adapter for checked-in or user-supplied recordings. */
++export class RecordedSensorPlayback<TPayload = unknown> {
++  readonly capabilities = RESEARCH_INTERFACE_CAPABILITIES;
++  private cursor = 0;
++  private readonly frames: readonly RecordedSensorFrame<TPayload>[];
++
++  constructor(frames: readonly RecordedSensorFrame<TPayload>[]) {
++    this.frames = frames.map((frame, index) => {
++      if (!Number.isFinite(frame.timestamp) || frame.timestamp < 0) {
++        throw new Error(`frames[${index}].timestamp must be finite and nonnegative.`);
++      }
++      if (index > 0 && frame.timestamp < frames[index - 1].timestamp) {
++        throw new Error("Recorded frames must be sorted by timestamp.");
++      }
++      return Object.freeze({ timestamp: frame.timestamp, payload: structuredClone(frame.payload) });
++    });
++  }
++
++  reset(): void {
++    this.cursor = 0;
++  }
++
++  readThrough(timestamp: number): RecordedSensorFrame<TPayload>[] {
++    if (!Number.isFinite(timestamp) || timestamp < 0) {
++      throw new Error("timestamp must be finite and nonnegative.");
++    }
++    const available: RecordedSensorFrame<TPayload>[] = [];
++    while (this.cursor < this.frames.length && this.frames[this.cursor].timestamp <= timestamp) {
++      available.push(structuredClone(this.frames[this.cursor]));
++      this.cursor += 1;
++    }
++    return available;
++  }
++}
+--- /dev/null	2026-08-16 23:17:06
++++ tests/research-interfaces.test.ts	2026-08-16 23:16:22
+@@ -0,0 +1,54 @@
++import { describe, expect, it } from "vitest";
++
++import {
++  RESEARCH_INTERFACE_CAPABILITIES,
++  RecordedSensorPlayback,
++  SYNTHETIC_ACOUSTIC_SIGNATURES,
++  syntheticRelativeLevelDb,
++} from "../src/sim/research-interfaces";
++
++describe("non-operational research interfaces", () => {
++  it("uses explicitly synthetic acoustic signatures with finite spectra", () => {
++    const signature = SYNTHETIC_ACOUSTIC_SIGNATURES["quiet-electric-rov"];
++    expect(signature.basis).toBe("synthetic-non-identifying");
++    expect(syntheticRelativeLevelDb(signature, 120)).toBeGreaterThan(
++      syntheticRelativeLevelDb(signature, 1_200),
++    );
++    expect(Number.isFinite(syntheticRelativeLevelDb(signature, 0))).toBe(true);
++  });
++
++  it("plays immutable recorded frames deterministically", () => {
++    const playback = new RecordedSensorPlayback([
++      { timestamp: 0.1, payload: { range: 8 } },
++      { timestamp: 0.2, payload: { range: 7.5 } },
++    ]);
++    expect(playback.readThrough(0.15)).toEqual([
++      { timestamp: 0.1, payload: { range: 8 } },
++    ]);
++    expect(playback.readThrough(0.25)).toHaveLength(1);
++    expect(playback.readThrough(0.25)).toEqual([]);
++    playback.reset();
++    expect(playback.readThrough(0.25)).toHaveLength(2);
++  });
++
++  it("declares that live I/O, actuator commands, and external targeting are absent", () => {
++    expect(RESEARCH_INTERFACE_CAPABILITIES).toEqual({
++      mode: "recorded-playback",
++      liveIo: false,
++      actuatorCommands: false,
++      externalTargeting: false,
++    });
++  });
++
++  it("rejects invalid recordings and frequency inputs", () => {
++    expect(() => new RecordedSensorPlayback([{ timestamp: -1, payload: null }])).toThrow();
++    expect(() => new RecordedSensorPlayback([
++      { timestamp: 2, payload: null },
++      { timestamp: 1, payload: null },
++    ])).toThrow("sorted");
++    expect(() => syntheticRelativeLevelDb(
++      SYNTHETIC_ACOUSTIC_SIGNATURES["survey-thruster-lab"],
++      Number.NaN,
++    )).toThrow();
++  });
++});

@@ -1,5 +1,16 @@
 export { createDefaultConfig, createPortfolioDemoConfig, hashConfig, validateConfig } from "./config";
 export { acousticChannel, soundSpeedMackenzie, thorpAbsorptionDbPerKm } from "./acoustics";
+export {
+  RESEARCH_INTERFACE_CAPABILITIES,
+  RecordedSensorPlayback,
+  SYNTHETIC_ACOUSTIC_SIGNATURES,
+  syntheticRelativeLevelDb,
+} from "./research-interfaces";
+export type {
+  RecordedSensorFrame,
+  SyntheticAcousticBand,
+  SyntheticAcousticSignature,
+} from "./research-interfaces";
 export { telemetryToCsv } from "./csv";
 export { SimulationEngine, runHeadless } from "./engine";
 export { ExtendedKalmanFilter } from "./ekf";

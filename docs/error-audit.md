@@ -91,6 +91,6 @@ CSV, histogram bins, and empirical CDF points.
   every maneuver regime consistently.
 - The correct next estimator improvement is a turn-rate/acceleration model or IMM,
   followed by a new paired consistency study—not cosmetic covariance tuning.
-- The default civilian profile uses published coefficients, but their diagonal
+- The optional civilian profile uses published coefficients, but their diagonal
   implementation and reduced actuation model do not make this a validated physical
   vehicle model. The archived high-speed profile remains fictional.

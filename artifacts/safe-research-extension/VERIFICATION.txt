@@ -1,0 +1,42 @@
+BRANCH: codex/realistic-underwater-simulator
+CHANGED FIELD: src/sim/index.ts research-interface export surface; recorded-playback capability fields liveIo=false, actuatorCommands=false, externalTargeting=false.
+
+MODIFIED_FILE: /Users/rupertkahng/Documents/Torpedo/src/sim/index.ts
+DIFF_FILE: /Users/rupertkahng/Documents/Torpedo/artifacts/safe-research-extension/changes.diff
+VERIFICATION: /Users/rupertkahng/Documents/Torpedo/artifacts/safe-research-extension/VERIFICATION.txt
+ROLLBACK: /Users/rupertkahng/Documents/Torpedo/artifacts/safe-research-extension/ROLLBACK.sh
+
+ORIGINAL SHA-256: a266b77090dad56255ad6730401aefe3771ef5c2a19828536cb888dc9909783e
+MODIFIED SHA-256: dc77c4e509a55d264a1ea25befbd8ecee9681e587b4d3b0c11b384e27cb2fd64
+
+BASELINE
+Command: npm run test:unit
+Input: pre-change repository; src/sim/index.ts SHA-256 a266b77090dad56255ad6730401aefe3771ef5c2a19828536cb888dc9909783e
+Literal result:
+ Test Files  18 passed (18)
+      Tests  55 passed (55)
+Exit status: 0
+
+MODIFIED
+Command: npm run test:unit
+Input: modified repository with research-interfaces module and tests; src/sim/index.ts SHA-256 dc77c4e509a55d264a1ea25befbd8ecee9681e587b4d3b0c11b384e27cb2fd64
+Literal result:
+ Test Files  19 passed (19)
+      Tests  59 passed (59)
+Exit status: 0
+
+BUILD
+Command: npm run build
+Input: modified repository
+Literal result: ✓ 50 modules transformed. ✓ built in 642ms
+Exit status: 0
+
+ROLLBACK
+Command: artifacts/safe-research-extension/ROLLBACK.sh artifacts/safe-research-extension/rollback-probe.ts
+Input: rollback-probe.ts copied from modified src/sim/index.ts
+Literal output:
+a266b77090dad56255ad6730401aefe3771ef5c2a19828536cb888dc9909783e  artifacts/safe-research-extension/rollback-probe.ts
+Exit status: 0
+Restored behavior/status: cmp against index.ts.original returned exit status 0; rollback-probe.ts restored byte-for-byte while MODIFIED_FILE remains changed.
+
+NOTE: An earlier modified full-suite run had one existing engine determinism test exceed its 5000 ms timeout; the immediate unchanged rerun above passed all 59 tests.

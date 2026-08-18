@@ -140,7 +140,7 @@ export function createDefaultConfig(): SimulationConfig {
     },
     interceptRadius: 14,
   };
-  applyHydrodynamicProfile(config, "bluerov2-heavy-2024");
+  applyHydrodynamicProfile(config, "generic-fictional");
   return config;
 }
 

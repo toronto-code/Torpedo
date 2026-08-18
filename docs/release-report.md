@@ -28,13 +28,13 @@ synthetic active-echo link budget, seeded probability of detection, and two-way
 propagation delay. It does not add BELLHOP ray tracing, hardware connections, or
 field-validation claims.
 
-The current default 6-DOF setup adds a published civilian BlueROV2 Heavy reference
+An optional 6-DOF setup provides a published civilian BlueROV2 Heavy reference
 profile using the coefficient mapping recorded in `docs/hydrodynamic-reference.md`.
-The historical demonstration continues to use its frozen fictional coefficient set.
+The default and historical demonstration use the high-speed synthetic coefficient set.
 
 A portable archive of the bundle is next to it at
 `Guidance-Estimation-Laboratory-1.0.0-macos-arm64.zip` (3.7 MB, SHA-256
-`a118372270ab3632880ea2281c4ae8439f78c2afb55c141b44496ef16a1255f2`).
+`50b706d7bf8ec755e6b5f3373914adfb2560ce927d730b50a7473218b0775015`).
 
 The bundle is 11 MB, targets arm64 macOS, embeds version `1.0.0`, and passes strict
 deep code-signature verification. It is ad-hoc signed with hardened runtime; it is
@@ -42,7 +42,7 @@ not Developer-ID signed or notarized because Apple distribution credentials are 
 part of this repository. Executable SHA-256:
 
 ```text
-aa2e29d007e45154728d4c2a068b08bbf7b5fab39624148d23f1f89d880fa844
+f60f5147d0c13dfde6ac7f62a7fd21bbbeb303f9f76d5347d1c1234096e55f40
 ```
 
 ## Demo evidence
@@ -67,7 +67,7 @@ the same numbered sequence.
 
 ## Verification matrix
 
-- Vitest: 18 files, 55 tests passed.
+- Vitest: 19 files, 59 tests passed.
 - Strict TypeScript and Vite production build: passed.
 - ESLint: passed without warnings.
 - Rust `cargo check`: passed.
