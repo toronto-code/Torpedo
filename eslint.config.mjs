@@ -8,6 +8,7 @@ export default tseslint.config(
       "outputs/**",
       "coverage/**",
       "dist/**",
+      "artifacts/**",
       "src-tauri/target/**",
       ".next/**",
       ".vinext/**",
