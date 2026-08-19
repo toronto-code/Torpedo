@@ -17,6 +17,14 @@ export interface SensorSample {
   acoustic: AcousticChannelState | null;
 }
 
+/** Truth-side inputs for one contact during a multi-return ping. The
+ *  observation stays anonymous: no identity field crosses this boundary. */
+export interface SeekerContact {
+  state: VehicleState;
+  targetStrengthDb: number;
+  echoFluctuation?: { amplitudeDb: number; period: number };
+}
+
 export class SeekerModel {
   private nextSampleTime = 0;
   private observationId = 0;
@@ -55,7 +63,66 @@ export class SeekerModel {
   ): SensorSample | null {
     if (timestamp + 1e-10 < this.nextSampleTime) return null;
     this.nextSampleTime += 1 / this.cadenceHz;
+    return this.sampleContact(
+      timestamp,
+      sensor,
+      target,
+      this.noise,
+      this.acoustic?.targetStrengthDb ?? 0,
+      undefined,
+      this.dropout,
+      this.channelRandom,
+    );
+  }
 
+  /**
+   * Multi-return ping: evaluates every contact independently with dedicated
+   * per-contact random streams, so adding a contact never perturbs another
+   * contact's draws. Returns one (possibly null-observation) sample per
+   * contact, in the caller's order.
+   */
+  sampleContacts(
+    timestamp: number,
+    sensor: VehicleState,
+    contacts: readonly SeekerContact[],
+    streams: {
+      noise: SeededRandom;
+      dropout: SeededRandom;
+      channel: SeededRandom;
+    }[],
+    fallbackStreams: {
+      noise: SeededRandom;
+      dropout: SeededRandom;
+      channel: SeededRandom;
+    },
+  ): SensorSample[] | null {
+    if (timestamp + 1e-10 < this.nextSampleTime) return null;
+    this.nextSampleTime += 1 / this.cadenceHz;
+    return contacts.map((contact, index) => {
+      const stream = streams[index] ?? fallbackStreams;
+      return this.sampleContact(
+        timestamp,
+        sensor,
+        contact.state,
+        stream.noise,
+        contact.targetStrengthDb,
+        contact.echoFluctuation,
+        stream.dropout,
+        stream.channel,
+      );
+    });
+  }
+
+  private sampleContact(
+    timestamp: number,
+    sensor: VehicleState,
+    target: VehicleState,
+    noise: SeededRandom,
+    targetStrengthDb: number,
+    echoFluctuation: { amplitudeDb: number; period: number } | undefined,
+    dropout: SeededRandom,
+    channelRandom: SeededRandom | undefined,
+  ): SensorSample {
     const relative = subtract2(target.position, sensor.position);
     const range = magnitude2(relative);
     const channel = this.environment && this.acoustic?.enabled
@@ -65,7 +132,15 @@ export class SeekerModel {
           sensor.depth,
           target.depth,
           this.environment,
-          this.acoustic,
+          echoFluctuation
+            ? {
+                ...this.acoustic!,
+                targetStrengthDb:
+                  targetStrengthDb +
+                  echoFluctuation.amplitudeDb *
+                    Math.sin((2 * Math.PI * timestamp) / echoFluctuation.period),
+              }
+            : { ...this.acoustic!, targetStrengthDb },
         )
       : null;
     if (range < this.config.minRange || range > this.config.maxRange) {
@@ -77,10 +152,10 @@ export class SeekerModel {
     if (Math.abs(trueBearing) > this.config.fovHalfAngle) {
       return { status: "out-of-fov", observation: null, acoustic: channel };
     }
-    if (channel && this.channelRandom && this.channelRandom.next() > channel.detectionProbability) {
+    if (channel && channelRandom && channelRandom.next() > channel.detectionProbability) {
       return { status: "acoustic-loss", observation: null, acoustic: channel };
     }
-    if (this.dropout.next() < this.config.dropoutProbability) {
+    if (dropout.next() < this.config.dropoutProbability) {
       return { status: "dropout", observation: null, acoustic: channel };
     }
 
@@ -91,9 +166,9 @@ export class SeekerModel {
       observedAt: timestamp,
       deliveredAt: timestamp + this.config.latency + (channel?.propagationDelay ?? 0),
       bearing: wrapAngle(
-        trueBearing + this.noise.gaussian(0, this.config.bearingSigma),
+        trueBearing + noise.gaussian(0, this.config.bearingSigma),
       ),
-      range: Math.max(1, range + this.noise.gaussian(0, rangeSigma)),
+      range: Math.max(1, range + noise.gaussian(0, rangeSigma)),
       bearingVariance: this.config.bearingSigma ** 2,
       rangeVariance: rangeSigma ** 2,
       sensorPosition: { x: sensor.position.x, y: sensor.position.y },

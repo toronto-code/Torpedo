@@ -343,6 +343,44 @@ export function validateConfig(config: SimulationConfig): void {
   if (!["planar-2.5d", "six-dof"].includes(config.dynamics.model)) {
     throw new Error("Unknown dynamics model.");
   }
+  if (config.contacts) {
+    const ids = new Set<string>();
+    for (const contact of config.contacts) {
+      if (!contact.id || ids.has(contact.id)) {
+        throw new Error("contacts require unique non-empty ids.");
+      }
+      ids.add(contact.id);
+      if (contact.targetStrengthDb !== undefined) {
+        finite(`contacts.${contact.id}.targetStrengthDb`, contact.targetStrengthDb);
+      }
+      const behavior = contact.behavior;
+      if (behavior) {
+        if (behavior.kind === "constant-turn" || behavior.kind === "scripted-evasive") {
+          finite(`contacts.${contact.id}.rate`, behavior.rate);
+        }
+        if (behavior.kind === "scripted-evasive" || behavior.kind === "decoy") {
+          nonnegative(`contacts.${contact.id}.triggerRange`, behavior.triggerRange);
+        }
+        if (behavior.kind === "biologic-wander") {
+          positive(`contacts.${contact.id}.amplitude`, behavior.amplitude);
+          positive(`contacts.${contact.id}.period`, behavior.period);
+        }
+        if (behavior.kind === "decoy") {
+          positive(`contacts.${contact.id}.deploySpeed`, behavior.deploySpeed);
+        }
+      }
+      if (contact.echoFluctuation) {
+        finite(`contacts.${contact.id}.echoFluctuation.amplitudeDb`, contact.echoFluctuation.amplitudeDb);
+        positive(`contacts.${contact.id}.echoFluctuation.period`, contact.echoFluctuation.period);
+      }
+      if (
+        contact.deployedBy !== undefined &&
+        !config.contacts.some((other) => other.id === contact.deployedBy)
+      ) {
+        throw new Error(`contacts.${contact.id}.deployedBy references an unknown contact.`);
+      }
+    }
+  }
   if (config.weapon) {
     const weapon = config.weapon;
     const phases = weapon.phases;

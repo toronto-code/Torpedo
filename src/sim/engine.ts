@@ -29,11 +29,18 @@ import {
 import { clamp, isFiniteArray, magnitude2, mean, subtract2 } from "./math";
 import { deriveSeed, SeededRandom } from "./random";
 import { horizontalRange, targetYawRateCommand } from "./scenario";
-import { SeekerModel } from "./sensor";
+import {
+  activateDecoy,
+  contactControl,
+  createContactRuntime,
+  type ContactRuntime,
+} from "./contacts";
+import { SeekerModel, type SeekerContact } from "./sensor";
 import { sixDofAttitude } from "./six-dof";
 import { perfectTrack, RawObservationTracker } from "./trackers";
 import type {
   ConsistencySample,
+  ContactTruth,
   EngineStep,
   ExperimentResult,
   GuidanceCommand,
@@ -106,6 +113,13 @@ export class SimulationEngine {
   private homing: HomingState | null = null;
   private fuzeState: FuzeState | null = null;
   private distanceTravelled = 0;
+  // Multi-contact state; null keeps the legacy single-target path.
+  private readonly contactRuntimes: ContactRuntime[] | null = null;
+  private readonly contactStreams: {
+    noise: SeededRandom;
+    dropout: SeededRandom;
+    channel: SeededRandom;
+  }[] = [];
 
   constructor(readonly config: SimulationConfig) {
     validateConfig(config);
@@ -147,6 +161,18 @@ export class SimulationEngine {
       new SeededRandom(deriveSeed(config.seed, "acoustic-channel")),
     );
     this.ekf = new ExtendedKalmanFilter(config.estimator);
+    if (config.contacts && config.contacts.length > 0) {
+      this.contactRuntimes = config.contacts.map((spec) =>
+        createContactRuntime(spec, config),
+      );
+      this.contactStreams = config.contacts.map((spec) => ({
+        noise: new SeededRandom(deriveSeed(config.seed, `contact-noise-${spec.id}`)),
+        dropout: new SeededRandom(deriveSeed(config.seed, `contact-dropout-${spec.id}`)),
+        channel: new SeededRandom(deriveSeed(config.seed, `contact-channel-${spec.id}`)),
+      }));
+      const primary = this.primaryContactRuntime();
+      if (primary) this.target = primary.state;
+    }
     if (config.weapon) {
       this.weapon = config.weapon;
       this.homing = initialHomingState();
@@ -212,6 +238,19 @@ export class SimulationEngine {
       case "ekf":
         return this.ekf.estimateAt(this.timestamp);
     }
+  }
+
+  /** Primary (hostile-first) active contact; drives legacy-oriented
+   * termination/metrics until designation replaces it. */
+  private primaryContactRuntime(): ContactRuntime | null {
+    if (!this.contactRuntimes) return null;
+    return (
+      this.contactRuntimes.find(
+        (runtime) => runtime.active && runtime.spec.kind === "hostile-sub",
+      ) ??
+      this.contactRuntimes.find((runtime) => runtime.active) ??
+      null
+    );
   }
 
   private updateGuidance(): void {
@@ -375,6 +414,43 @@ export class SimulationEngine {
   }
 
   private sampleAndDeliverObservations(): void {
+    if (this.contactRuntimes) {
+      const seekerContacts: SeekerContact[] = this.contactRuntimes
+        .filter((runtime) => runtime.active)
+        .map((runtime) => ({
+          state: runtime.state,
+          targetStrengthDb: runtime.spec.targetStrengthDb
+            ?? this.config.acoustic?.targetStrengthDb
+            ?? 0,
+          echoFluctuation: runtime.spec.echoFluctuation,
+        }));
+      const samples = this.seeker.sampleContacts(
+        this.timestamp,
+        this.torpedo,
+        seekerContacts,
+        this.contactStreams,
+        {
+          noise: new SeededRandom(0),
+          dropout: new SeededRandom(0),
+          channel: new SeededRandom(0),
+        },
+      );
+      if (samples) {
+        const locked = samples.find((sample) => sample.status === "locked");
+        this.seekerStatus = locked
+          ? "locked"
+          : (samples[0]?.status ?? "searching");
+        this.latestAcoustic =
+          samples.find((sample) => sample.acoustic)?.acoustic ?? null;
+        for (const sample of samples) {
+          if (sample.observation) {
+            this.pendingObservations.push(sample.observation);
+          }
+        }
+      }
+      this.deliverPendingObservations();
+      return;
+    }
     const sample = this.seeker.sample(
       this.timestamp,
       this.torpedo,
@@ -387,6 +463,10 @@ export class SimulationEngine {
         this.pendingObservations.push(sample.observation);
       }
     }
+    this.deliverPendingObservations();
+  }
+
+  private deliverPendingObservations(): void {
     while (
       this.pendingObservations.length > 0 &&
       this.pendingObservations[0].deliveredAt <= this.timestamp + 1e-10
@@ -425,6 +505,20 @@ export class SimulationEngine {
     };
   }
 
+  private buildContactTruth(): ContactTruth[] | undefined {
+    if (!this.contactRuntimes) return undefined;
+    return this.contactRuntimes.map((runtime) => ({
+      id: runtime.spec.id,
+      kind: runtime.spec.kind,
+      position: runtime.state.position,
+      velocity: runtime.state.velocity,
+      heading: runtime.state.heading,
+      speed: runtime.state.speed,
+      depth: runtime.state.depth,
+      active: runtime.active,
+    }));
+  }
+
   private buildTelemetry(): TelemetrySample {
     const estimate = this.selectedTrack();
     const metrics = engagementMetrics(this.torpedo, this.target, estimate);
@@ -450,6 +544,7 @@ export class SimulationEngine {
       covarianceTrace,
       nees,
       weapon: this.buildWeaponTelemetry(),
+      contacts: this.buildContactTruth(),
       acoustic: this.latestAcoustic,
     };
   }
@@ -466,6 +561,7 @@ export class SimulationEngine {
       metrics: sample.metrics,
       seekerStatus: this.seekerStatus,
       weapon: sample.weapon,
+      contacts: sample.contacts,
       acoustic: this.latestAcoustic,
     };
   }
@@ -517,34 +613,74 @@ export class SimulationEngine {
     if (this.tick % this.autopilotEvery === 0) this.updateAutopilot();
 
     const rangeBefore = horizontalRange(this.torpedo, this.target);
-    const targetControl: VehicleControl = {
-      yawRateCommand: targetYawRateCommand(
-        this.config.scenario,
-        rangeBefore,
-      ),
-      depthRateCommand:
-        this.target.dynamicsModel === "six-dof"
-          ? depthRateAutopilot(
-              this.config.target.commandedDepth,
-              this.target,
-              this.config.target.parameters,
-            )
-          : 0,
-      speedCommand: this.config.target.commandedSpeed,
-    };
     const previousTorpedoPosition = this.torpedo.position;
-    this.torpedo = this.torpedoDynamics.integrate(
-      this.torpedo,
-      this.torpedoControl,
-      this.config.torpedo,
-      this.dt,
-    );
-    this.target = this.targetDynamics.integrate(
-      this.target,
-      targetControl,
-      this.config.target,
-      this.dt,
-    );
+    if (this.contactRuntimes) {
+      for (const runtime of this.contactRuntimes) {
+        if (!runtime.active) {
+          const behavior = runtime.spec.behavior;
+          if (behavior?.kind === "decoy") {
+            const runtimes = this.contactRuntimes;
+            const spawnerId =
+              runtime.spec.deployedBy ??
+              runtimes.find((c) => c.spec.kind === "hostile-sub")?.spec.id ??
+              "";
+            const spawner =
+              runtimes.find((candidate) => candidate.spec.id === spawnerId) ??
+              this.primaryContactRuntime();
+            const spawnerRange = spawner
+              ? horizontalRange(this.torpedo, spawner.state)
+              : Number.POSITIVE_INFINITY;
+            if (spawner && spawnerRange <= behavior.triggerRange) {
+              activateDecoy(runtime, spawner);
+            }
+          }
+          if (!runtime.active) continue;
+        }
+        const control = contactControl(runtime, rangeBefore, this.timestamp);
+        runtime.state = runtime.dynamics.integrate(
+          runtime.state,
+          control,
+          runtime.spec.vehicle,
+          this.dt,
+        );
+      }
+      const primary = this.primaryContactRuntime();
+      if (primary) this.target = primary.state;
+      this.torpedo = this.torpedoDynamics.integrate(
+        this.torpedo,
+        this.torpedoControl,
+        this.config.torpedo,
+        this.dt,
+      );
+    } else {
+      const targetControl: VehicleControl = {
+        yawRateCommand: targetYawRateCommand(
+          this.config.scenario,
+          rangeBefore,
+        ),
+        depthRateCommand:
+          this.target.dynamicsModel === "six-dof"
+            ? depthRateAutopilot(
+                this.config.target.commandedDepth,
+                this.target,
+                this.config.target.parameters,
+              )
+            : 0,
+        speedCommand: this.config.target.commandedSpeed,
+      };
+      this.torpedo = this.torpedoDynamics.integrate(
+        this.torpedo,
+        this.torpedoControl,
+        this.config.torpedo,
+        this.dt,
+      );
+      this.target = this.targetDynamics.integrate(
+        this.target,
+        targetControl,
+        this.config.target,
+        this.dt,
+      );
+    }
     this.tick += 1;
     this.distanceTravelled += Math.hypot(
       this.torpedo.position.x - previousTorpedoPosition.x,
@@ -604,6 +740,11 @@ export class SimulationEngine {
       this.torpedo.angularVelocity.x,
       this.torpedo.angularVelocity.y,
       this.torpedo.angularVelocity.z,
+      ...(this.contactRuntimes ?? []).flatMap((runtime) => [
+        runtime.state.position.x,
+        runtime.state.position.y,
+        runtime.state.position.z,
+      ]),
     ];
     const fuzed =
       this.weapon?.fuze !== undefined &&

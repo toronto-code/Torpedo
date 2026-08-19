@@ -29,6 +29,49 @@ export type ScenarioKind =
 
 export type HomingPhase = "run-out" | "homing" | "terminal" | "reacquisition";
 
+/** Ground-truth contact category. Truth-only: never exposed to the
+ *  observation/classification/selection pipeline. */
+export type ContactKind =
+  | "hostile-sub"
+  | "friendly-sub"
+  | "commercial-surface"
+  | "biological"
+  | "decoy"
+  | "ambiguous";
+
+export type ContactBehavior =
+  | { kind: "constant-velocity" }
+  | { kind: "constant-turn"; rate: number }
+  | { kind: "scripted-evasive"; triggerRange: number; rate: number }
+  | { kind: "biologic-wander"; amplitude: number; period: number }
+  | { kind: "decoy"; triggerRange: number; deploySpeed: number; headingOffset?: number };
+
+export interface ContactSpec {
+  id: string;
+  kind: ContactKind;
+  vehicle: VehicleConfig;
+  /** Per-contact acoustic target strength (dB) for the link budget. */
+  targetStrengthDb?: number;
+  /** Deterministic echo-strength fluctuation (dB) for ambiguous contacts. */
+  echoFluctuation?: { amplitudeDb: number; period: number };
+  behavior?: ContactBehavior;
+  /** Contact that launches this decoy once the weapon closes (decoys only). */
+  deployedBy?: string;
+}
+
+/** Truth contact state in telemetry/snapshots; consumed by rendering and
+ *  scoring only, never by estimation or control. */
+export interface ContactTruth {
+  id: string;
+  kind: ContactKind;
+  position: Vec3;
+  velocity: Vec3;
+  heading: number;
+  speed: number;
+  depth: number;
+  active: boolean;
+}
+
 export interface WeaponPhasesConfig {
   /** Run-out duration before homing enables (s). */
   enableTime?: number;
@@ -264,6 +307,9 @@ export interface SimulationConfig {
   guidance: GuidanceConfig;
   scenario: ScenarioConfig;
   dynamics: DynamicsConfig;
+  /** Multi-contact scene. Absent keeps the single-`target` legacy engagement
+   *  bit-identical. */
+  contacts?: ContactSpec[];
   weapon?: WeaponSystemConfig;
   environment?: EnvironmentConfig;
   acoustic?: AcousticConfig;
@@ -380,6 +426,7 @@ export interface TelemetrySample {
   covarianceTrace: number | null;
   nees: number | null;
   weapon?: WeaponTelemetry;
+  contacts?: ContactTruth[];
   acoustic?: AcousticChannelState | null;
 }
 
@@ -399,6 +446,7 @@ export interface RenderSnapshot {
   metrics: EngagementMetrics;
   seekerStatus: SeekerStatus;
   weapon?: WeaponTelemetry;
+  contacts?: ContactTruth[];
   acoustic?: AcousticChannelState | null;
 }
 
