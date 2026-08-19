@@ -19,6 +19,7 @@
     "sim:compare": "node --import tsx scripts/run-headless.ts --compare",
     "sim:monte-carlo": "node --import tsx scripts/run-monte-carlo.ts",
     "sim:weaponeering": "node --import tsx scripts/run-weaponeering.ts",
+    "sim:engagement": "node --import tsx scripts/run-engagement-study.ts",
     "sim:fidelity": "node --import tsx scripts/run-fidelity.ts",
     "sim:soak": "node --import tsx scripts/run-soak.ts",
     "demo:encode": "node --import tsx scripts/encode-demo-video.ts",
