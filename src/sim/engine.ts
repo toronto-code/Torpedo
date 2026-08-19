@@ -36,7 +36,16 @@ import {
   type ContactRuntime,
 } from "./contacts";
 import { SeekerModel, type SeekerContact } from "./sensor";
-import { MultiTargetTracker } from "./tracker";
+import { MultiTargetTracker, type TrackFeatures } from "./tracker";
+import { ContactClassifier, type TrackClassification } from "./classify";
+import {
+  defaultDoctrine,
+  initialTewaState,
+  manualAuthorize,
+  updateTewa,
+  type TewaCandidate,
+  type TewaState,
+} from "./tewa";
 import { sixDofAttitude } from "./six-dof";
 import { perfectTrack, RawObservationTracker } from "./trackers";
 import type {
@@ -122,6 +131,9 @@ export class SimulationEngine {
     channel: SeededRandom;
   }[] = [];
   private tracker: MultiTargetTracker | null = null;
+  private readonly classifier = new ContactClassifier();
+  private tewa: TewaState = initialTewaState();
+  private lastCandidates: TewaCandidate[] = [];
 
   constructor(readonly config: SimulationConfig) {
     validateConfig(config);
@@ -172,15 +184,16 @@ export class SimulationEngine {
         dropout: new SeededRandom(deriveSeed(config.seed, `contact-dropout-${spec.id}`)),
         channel: new SeededRandom(deriveSeed(config.seed, `contact-channel-${spec.id}`)),
       }));
-      const primary = this.primaryContactRuntime();
+      const primary =
+        this.designatedContactRuntime() ?? this.primaryContactRuntime();
       if (primary) this.target = primary.state;
       if (config.guidance.mode === "raw" || config.guidance.mode === "ekf") {
         this.tracker = new MultiTargetTracker(
           {
             estimator: config.estimator,
-            confirmationCount: 3,
-            tentativeTimeout: 4,
-            deletionTimeout: 10,
+            confirmationCount: 5,
+            tentativeTimeout: 2.5,
+            deletionTimeout: 6,
           },
           config.guidance.mode,
         );
@@ -243,16 +256,16 @@ export class SimulationEngine {
   }
 
   private selectedTrack(): TrackEstimate | null {
-    if (this.tracker) {
-      // Interim selection: the most recently updated confirmed track.
-      // Phase 4 replaces this with doctrine-driven TEWA designation.
-      const tracks = this.tracker
-        .liveTracks(this.timestamp)
-        .filter((track) => track.meta.quality === "confirmed")
-        .sort(
-          (a, b) => b.meta.lastObservationAt - a.meta.lastObservationAt,
-        );
-      return tracks[0]?.estimate ?? null;
+    if (this.contactRuntimes) {
+      const designation = this.tewa.designation;
+      if (!designation) return null;
+      if (this.tracker) {
+        return this.tracker.estimateForTrack(this.timestamp, designation.trackId);
+      }
+      const candidate = this.lastCandidates.find(
+        (entry) => entry.trackId === designation.trackId,
+      );
+      return candidate?.estimate ?? null;
     }
     switch (this.config.guidance.mode) {
       case "perfect":
@@ -262,6 +275,58 @@ export class SimulationEngine {
       case "ekf":
         return this.ekf.estimateAt(this.timestamp);
     }
+  }
+
+  /**
+   * The tracked picture the TEWA layer sees: live tracks with accumulated
+   * classification. Perfect mode mirrors truth contacts with zero-noise
+   * kinematics; classification still runs on features so ablations remain
+   * comparable.
+   */
+  private buildTrackPicture(): TewaCandidate[] {
+    if (!this.contactRuntimes) return [];
+    if (this.tracker) {
+      return this.tracker.liveTracks(this.timestamp).map((track) => ({
+        trackId: track.meta.id,
+        estimate: track.estimate,
+        quality: track.meta.quality,
+        classification: this.classifier.update(
+          track.meta.id,
+          this.timestamp,
+          track.estimate,
+          track.meta.features,
+        ),
+      }));
+    }
+    return this.contactRuntimes
+      .filter((runtime) => runtime.active)
+      .map((runtime, index) => {
+        const trackId = -(index + 1);
+        const estimate = perfectTrack(runtime.state, this.timestamp);
+        const features: TrackFeatures = {
+          impliedTargetStrengthDb: runtime.spec.targetStrengthDb ?? null,
+          snrDb: null,
+          signatureCorrelation: runtime.spec.friendlySignature ?? 0.1,
+          observationCount: 1,
+        };
+        const classification: TrackClassification = this.classifier.update(
+          trackId,
+          this.timestamp,
+          estimate,
+          features,
+        );
+        return { trackId, estimate, quality: "confirmed", classification };
+      });
+  }
+
+  /** Operator authorization (manual override; logged as a pipeline event). */
+  authorize(): void {
+    if (!this.contactRuntimes) return;
+    this.tewa = manualAuthorize(this.tewa, this.timestamp);
+  }
+
+  get engagementAuthorized(): boolean {
+    return this.contactRuntimes === null || this.tewa.authorized;
   }
 
   /** Primary (hostile-first) active contact; drives legacy-oriented
@@ -277,8 +342,80 @@ export class SimulationEngine {
     );
   }
 
+  /**
+   * Truth contact paired with the designated track for metrics/termination
+   * (truth-side usage, like the range check — never fed to control). Falls
+   * back to the primary hostile contact without a designation.
+   */
+  private designatedContactRuntime(): ContactRuntime | null {
+    if (!this.contactRuntimes) return null;
+    const designation = this.tewa.designation;
+    if (designation) {
+      const candidate = this.lastCandidates.find(
+        (entry) => entry.trackId === designation.trackId,
+      );
+      if (candidate) {
+        let best: ContactRuntime | null = null;
+        let bestDistance = Number.POSITIVE_INFINITY;
+        for (const runtime of this.contactRuntimes) {
+          if (!runtime.active) continue;
+          const distance = Math.hypot(
+            runtime.state.position.x - candidate.estimate.position.x,
+            runtime.state.position.y - candidate.estimate.position.y,
+          );
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            best = runtime;
+          }
+        }
+        if (best) return best;
+      }
+    }
+    return this.primaryContactRuntime();
+  }
+
+  /** Nearest active truth contact in full 3D (fuze/termination scoring). */
+  private nearestActiveContact(): { runtime: ContactRuntime; separation: number } | null {
+    if (!this.contactRuntimes) return null;
+    let best: { runtime: ContactRuntime; separation: number } | null = null;
+    for (const runtime of this.contactRuntimes) {
+      if (!runtime.active) continue;
+      const separation = Math.hypot(
+        runtime.state.position.x - this.torpedo.position.x,
+        runtime.state.position.y - this.torpedo.position.y,
+        runtime.state.position.z - this.torpedo.position.z,
+      );
+      if (!best || separation < best.separation) best = { runtime, separation };
+    }
+    return best;
+  }
+
   private updateGuidance(): void {
     if (this.tracker) this.tracker.prune(this.timestamp);
+    if (this.contactRuntimes) {
+      // TEWA: build the classified track picture, run selection and the
+      // authorization doctrine, then gate the engagement.
+      this.lastCandidates = this.buildTrackPicture();
+      this.tewa = updateTewa({
+        state: this.tewa,
+        now: this.timestamp,
+        candidates: this.lastCandidates,
+        ownPosition: {
+          x: this.torpedo.position.x,
+          y: this.torpedo.position.y,
+        },
+        doctrine: this.config.doctrine ?? defaultDoctrine(),
+      });
+      if (!this.tewa.authorized) {
+        // Hold fire: run straight on the launch heading until authorized.
+        this.guidance = idleGuidance(
+          this.timestamp,
+          this.config.guidance.law,
+          this.torpedo.heading,
+        );
+        return;
+      }
+    }
     const track = this.selectedTrack();
     if (this.weapon && this.homing) {
       this.updateWeaponPhase(track);
@@ -448,6 +585,7 @@ export class SimulationEngine {
             ?? this.config.acoustic?.targetStrengthDb
             ?? 0,
           echoFluctuation: runtime.spec.echoFluctuation,
+          friendlySignature: runtime.spec.friendlySignature,
         }));
       const samples = this.seeker.sampleContacts(
         this.timestamp,
@@ -635,6 +773,27 @@ export class SimulationEngine {
           : undefined;
       }
     }
+    if (this.contactRuntimes) {
+      this.result.tewaEvents = this.tewa.events.map((event) => ({ ...event }));
+      const nearest = this.nearestActiveContact();
+      if (
+        (reason === "fuzed-detonation" || reason === "intercept") &&
+        nearest
+      ) {
+        this.result.engagedContact = {
+          id: nearest.runtime.spec.id,
+          kind: nearest.runtime.spec.kind,
+        };
+        this.result.engagementOutcome =
+          nearest.runtime.spec.kind === "hostile-sub"
+            ? "correct-hostile"
+            : nearest.runtime.spec.kind === "decoy"
+              ? "decoy-seduction"
+              : "wrong-contact";
+      } else {
+        this.result.engagementOutcome = "miss";
+      }
+    }
   }
 
   step(forceSnapshot = false): EngineStep {
@@ -675,7 +834,8 @@ export class SimulationEngine {
           this.dt,
         );
       }
-      const primary = this.primaryContactRuntime();
+      const primary =
+        this.designatedContactRuntime() ?? this.primaryContactRuntime();
       if (primary) this.target = primary.state;
       this.torpedo = this.torpedoDynamics.integrate(
         this.torpedo,
@@ -777,19 +937,29 @@ export class SimulationEngine {
         runtime.state.position.z,
       ]),
     ];
+    const nearest = this.nearestActiveContact();
+    const proximityRange = nearest ? nearest.separation : sample.metrics.range;
     const fuzed =
       this.weapon?.fuze !== undefined &&
       this.fuzeState?.armed === true &&
-      fuzeTriggers(sample.metrics.range, this.weapon.fuze, this.fuzeRandom ?? undefined);
+      fuzeTriggers(
+        proximityRange,
+        this.weapon.fuze,
+        this.fuzeRandom ?? undefined,
+      );
     const exhausted =
       this.weapon?.endurance?.runTime !== undefined &&
       this.timestamp >= this.weapon.endurance.runTime;
+    // Multi-contact termination uses the nearest true contact (proximity
+    // scoring, like the fuze); legacy keeps the designated single target.
     if (!isFiniteArray(stateValues)) this.finish("invalid-state", sample);
-    else if (fuzed) this.finish("fuzed-detonation", sample, sample.metrics.range);
+    else if (fuzed) {
+      this.finish("fuzed-detonation", sample, proximityRange);
+    }
     else if (exhausted && this.timestamp < this.config.runtime.maxTime) {
       this.finish("endurance-exhausted", sample);
     }
-    else if (sample.metrics.range <= this.config.interceptRadius) {
+    else if (proximityRange <= this.config.interceptRadius) {
       this.finish("intercept", sample);
     } else if (this.timestamp >= this.config.runtime.maxTime) {
       this.finish("timeout", sample);

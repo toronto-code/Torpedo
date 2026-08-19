@@ -23,6 +23,7 @@ export interface SeekerContact {
   state: VehicleState;
   targetStrengthDb: number;
   echoFluctuation?: { amplitudeDb: number; period: number };
+  friendlySignature?: number;
 }
 
 export class SeekerModel {
@@ -70,6 +71,7 @@ export class SeekerModel {
       this.noise,
       this.acoustic?.targetStrengthDb ?? 0,
       undefined,
+      undefined,
       this.dropout,
       this.channelRandom,
     );
@@ -107,6 +109,7 @@ export class SeekerModel {
         stream.noise,
         contact.targetStrengthDb,
         contact.echoFluctuation,
+        contact.friendlySignature ?? 0.1,
         stream.dropout,
         stream.channel,
       );
@@ -120,6 +123,7 @@ export class SeekerModel {
     noise: SeededRandom,
     targetStrengthDb: number,
     echoFluctuation: { amplitudeDb: number; period: number } | undefined,
+    friendlySignature: number | undefined,
     dropout: SeededRandom,
     channelRandom: SeededRandom | undefined,
   ): SensorSample {
@@ -182,6 +186,14 @@ export class SeekerModel {
         channel.receivedEchoLevelDb -
         this.acoustic.sourceLevelDb +
         2 * channel.oneWayTransmissionLossDb;
+    }
+    if (friendlySignature !== undefined) {
+      // Synthetic friendly-marking correlation with receiver noise — a
+      // fictional IFF analog reported as a measurement feature.
+      observation.signatureCorrelation = Math.min(
+        1,
+        Math.max(0, friendlySignature + noise.gaussian(0, 0.04)),
+      );
     }
     return { status: "locked", observation, acoustic: channel };
   }

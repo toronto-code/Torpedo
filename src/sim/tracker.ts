@@ -16,6 +16,8 @@ export interface TrackFeatures {
   impliedTargetStrengthDb: number | null;
   /** Last measured signal-to-noise ratio (dB). */
   snrDb: number | null;
+  /** Mean synthetic friendly-marking correlation (0..1). */
+  signatureCorrelation: number | null;
   observationCount: number;
 }
 
@@ -39,6 +41,7 @@ interface InternalTrack {
   ekf: ExtendedKalmanFilter;
   raw: RawObservationTracker;
   impliedTsSum: number;
+  correlationSum: number;
 }
 
 export interface TrackerOptions {
@@ -187,12 +190,14 @@ export class MultiTargetTracker {
         features: {
           impliedTargetStrengthDb: null,
           snrDb: null,
+          signatureCorrelation: null,
           observationCount: 0,
         },
       },
       ekf: new ExtendedKalmanFilter(this.options.estimator),
       raw: new RawObservationTracker(),
       impliedTsSum: 0,
+      correlationSum: 0,
     };
     track.ekf.process(observation);
     track.raw.process(observation);
@@ -211,6 +216,11 @@ export class MultiTargetTracker {
       track.impliedTsSum += observation.impliedTargetStrengthDb;
       features.impliedTargetStrengthDb =
         track.impliedTsSum / features.observationCount;
+    }
+    if (observation.signatureCorrelation !== undefined) {
+      track.correlationSum += observation.signatureCorrelation;
+      features.signatureCorrelation =
+        track.correlationSum / features.observationCount;
     }
   }
 
@@ -250,7 +260,14 @@ export class MultiTargetTracker {
         (sInverse[0][0] * residual[0] + sInverse[0][1] * residual[1]) +
       residual[1] *
         (sInverse[1][0] * residual[0] + sInverse[1][1] * residual[1]);
-    return value <= this.options.estimator.innovationGate ? value : null;
+    // Coasting tracks get a relaxed gate so a maneuvering contact that
+    // briefly exceeds the tight gate resurrects its own track instead of
+    // splitting into a duplicate.
+    const gate =
+      track.meta.quality === "coasting"
+        ? this.options.estimator.innovationGate * 2
+        : this.options.estimator.innovationGate;
+    return value <= gate ? value : null;
   }
 }
 

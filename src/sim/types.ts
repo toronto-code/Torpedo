@@ -57,6 +57,9 @@ export interface ContactSpec {
   behavior?: ContactBehavior;
   /** Contact that launches this decoy once the weapon closes (decoys only). */
   deployedBy?: string;
+  /** Synthetic friendly-marking correlation the seeker receiver reports
+   *  (0..1): a fictional IFF analog carried as a measurement feature. */
+  friendlySignature?: number;
 }
 
 /** Truth contact state in telemetry/snapshots; consumed by rendering and
@@ -70,6 +73,24 @@ export interface ContactTruth {
   speed: number;
   depth: number;
   active: boolean;
+}
+
+/** Engagement doctrine (fictional). Drives legitimacy, selection, and the
+ *  authorization gate; consumes classification state only, never truth. */
+export interface DoctrineConfig {
+  mode: "manual" | "autonomous";
+  /** Minimum classification confidence required to authorize. */
+  requiredConfidence: number;
+  /** Classes that may never be designated or engaged. */
+  excludedClasses: string[];
+  /** Optional maximum designation range (m). */
+  engagementMaxRange?: number;
+  /** Seconds the doctrine must hold before autonomous authorization. */
+  autoAuthorizeSustain: number;
+  /** Minimum seconds a designation is held before switching. */
+  redesignateAfter: number;
+  /** Score margin a challenger needs to take the designation. */
+  redesignateMargin: number;
 }
 
 export interface WeaponPhasesConfig {
@@ -310,6 +331,7 @@ export interface SimulationConfig {
   /** Multi-contact scene. Absent keeps the single-`target` legacy engagement
    *  bit-identical. */
   contacts?: ContactSpec[];
+  doctrine?: DoctrineConfig;
   weapon?: WeaponSystemConfig;
   environment?: EnvironmentConfig;
   acoustic?: AcousticConfig;
@@ -358,6 +380,9 @@ export interface SensorObservation {
   /** Echo-derived feature: implied target strength (dB) with spreading
    *  removed. A measurement feature, not an identity. */
   impliedTargetStrengthDb?: number;
+  /** Synthetic friendly-marking correlation (0..1); a fictional IFF analog
+   *  measured by the receiver. A measurement feature, not an identity. */
+  signatureCorrelation?: number;
 }
 
 export interface TrackEstimate {
@@ -460,6 +485,14 @@ export type TerminationReason =
   | "fuzed-detonation"
   | "endurance-exhausted";
 
+/** Engagement correctness outcome (multi-contact scoring; truth-consuming,
+ *  results only). */
+export type EngagementOutcome =
+  | "correct-hostile"
+  | "decoy-seduction"
+  | "wrong-contact"
+  | "miss";
+
 export interface ExperimentResult {
   seed: number;
   configHash: string;
@@ -487,6 +520,10 @@ export interface ExperimentResult {
   fuzeMissDistance?: number;
   /** Synthetic effectiveness score in [0, 1]; fictional calibration. */
   effectivenessScore?: number;
+  /** Multi-contact engagement scoring (truth-consuming, results only). */
+  engagedContact?: { id: string; kind: ContactKind };
+  engagementOutcome?: EngagementOutcome;
+  tewaEvents?: { stage: string; at: number; detail: string }[];
 }
 
 export interface EngineStep {
