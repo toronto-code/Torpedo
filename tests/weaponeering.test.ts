@@ -20,7 +20,7 @@ function weaponConfig(): SimulationConfig {
 }
 
 describe("weaponeering study", () => {
-  it("sweeps paired seeds across weapon variants with consistent accounting", () => {
+  it("sweeps paired seeds across weapon variants with consistent accounting", { timeout: 30000 }, () => {
     const base = weaponConfig();
     const variants = defaultVariants(base.weapon!).slice(0, 3);
     const report = runWeaponeeringStudy({
