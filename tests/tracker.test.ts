@@ -112,7 +112,11 @@ describe("multi-target tracker", () => {
       );
     }
     tracker.prune(1);
-    expect(tracker.liveTracks(1)[0].meta.quality).toBe("confirmed");
+    const at1 = tracker.liveTracks(1);
+    expect(at1).toHaveLength(2);
+    expect(
+      at1.find((track) => track.meta.acceptedCount >= 4)?.meta.quality,
+    ).toBe("confirmed");
     tracker.prune(3);
     const at3 = tracker.liveTracks(3);
     expect(at3).toHaveLength(1);
