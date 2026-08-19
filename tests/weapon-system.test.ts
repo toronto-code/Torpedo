@@ -177,8 +177,6 @@ describe("fire-control solution and fireability", () => {
 });
 
 describe("homing phase machine", () => {
-  const phases = weapon.phases!;
-
   it("transitions run-out to homing on the enable schedule", () => {
     let state = initialHomingState();
     const first = updateHomingPhase({

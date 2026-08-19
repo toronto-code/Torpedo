@@ -147,6 +147,19 @@ than directly prescribing vertical motion. Intercept,
 truth range, closing velocity, and closest approach use full three-dimensional
 geometry, so horizontal coincidence at the wrong depth is not counted as success.
 
+## Weapon engagement
+
+The optional `weapon` configuration block phases the engagement: run-out on
+the frozen fire-control solution, homing, terminal (stricter gate, sprint,
+higher seeker cadence), and deterministic reacquisition search. Fire control
+and phase decisions consume only the delivered `TrackEstimate`; the fuze is
+the one truth-geometry consumer, isolated like the acoustic channel. An
+endurance budget and a proximity fuze add the `endurance-exhausted` and
+`fuzed-detonation` termination reasons, and a synthetic effectiveness score
+(fictional constants) is attached to results without any path back into
+control. Without the block, behavior is bit-identical to the legacy
+continuous-guidance engagement. See [weapon-model.md](weapon-model.md).
+
 ## Software-only acoustic environment
 
 The optional acoustic channel is a bounded analytic approximation. It evaluates

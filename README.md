@@ -14,7 +14,11 @@ a limited-FOV noisy seeker, raw tracking, an Extended
 Kalman Filter, pure pursuit, proportional navigation, ablation runs, and CSV
 telemetry. An optional software-only acoustic channel adds configurable water-column
 properties, analytic spreading and absorption, a synthetic echo link budget,
-probability of detection, and two-way propagation latency.
+probability of detection, and two-way propagation latency. An optional **phased
+weapon engagement** adds fire-control launch solutions, run-out/homing/terminal
+phases with reacquisition search, speed stages with an endurance budget, a
+proximity fuze, and a synthetic effectiveness score for benchmarking — all
+parameters fictional and uncalibrated (see `docs/weapon-model.md`).
 
 This repository does not model or claim correspondence to operational hardware.
 The default interactive experience opens the full 3D setup: 6-DOF dynamics,
@@ -42,6 +46,7 @@ npm run sim:compare
 npm run sim:headless -- --mode raw --law pure-pursuit --scenario scripted-evasive
 npm run sim:compare -- --seed 42 --csv outputs/engagement.csv
 npm run sim:monte-carlo -- --runs 20 --seed 42
+npm run sim:weaponeering -- --runs 8
 npm run sim:fidelity -- --runs 8 --scenario scripted-evasive
 npm run sim:soak -- --duration 600
 npm run sim:soak -- --duration 600 --dynamics six-dof
@@ -110,6 +115,11 @@ All modes use identical scenario and sensor seeds for paired comparisons.
 - NED coordinate kernel with a single Three.js conversion layer and golden
   behavioral regression against the pre-migration kernel (planar runs
   bit-identical, 6-DOF within floating-point round-off)
+- Phased weapon engagement: fire-control launch solutions on the delivered
+  track, run-out/homing/terminal phases, deterministic reacquisition, speed
+  stages, endurance budget, proximity fuze, and synthetic effectiveness
+  scoring (fictional constants; legacy configs bit-identical)
+- Paired weaponeering parameter sweep in the Analysis workspace and CLI
 - Opt-in full 3D tracked-target motion behind per-vehicle dynamics selection
 - 3D environment: water surface, seabed at the configured depth, depth ruler,
   exponential-fog perspective, and bounded allocation-free 3D trails
