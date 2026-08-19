@@ -5,7 +5,7 @@ import type { WeaponeeringReport } from "../analysis/weaponeering";
 import { parseReplay, serializeReplay } from "../replay/codec";
 import { telemetryThroughTime } from "../replay/timeline";
 import type { ReplayFile, ReplayVerification } from "../replay/types";
-import { createDefaultConfig, hashConfig } from "../sim/config";
+import { hashConfig } from "../sim/config";
 import { createAmbiguityScenarioConfig } from "../sim/scenarios";
 import { telemetryToCsv } from "../sim/csv";
 import type { SimulationConfig } from "../sim/types";

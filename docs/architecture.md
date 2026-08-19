@@ -147,6 +147,18 @@ than directly prescribing vertical motion. Intercept,
 truth range, closing velocity, and closest approach use full three-dimensional
 geometry, so horizontal coincidence at the wrong depth is not counted as success.
 
+## Autonomous multi-contact engagement
+
+The optional `contacts` block adds ground-truth contacts (kinds, per-contact
+acoustics, scripted behaviors, decoy deployment) evaluated by one anonymous
+multi-return seeker. A nearest-neighbor tracker maintains track files; a
+classifier accumulates evidence from observables only (implied target
+strength, kinematics, a synthetic friendly-marking correlation); TEWA
+designates under a fictional doctrine and gates the engagement behind
+manual or autonomous authorization. Results score engagement correctness.
+Identity never crosses the observation boundary; legacy single-target runs
+are bit-identical. See [autonomous-engagement.md](autonomous-engagement.md).
+
 ## Weapon engagement
 
 The optional `weapon` configuration block phases the engagement: run-out on

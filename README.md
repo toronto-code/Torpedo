@@ -120,6 +120,10 @@ All modes use identical scenario and sensor seeds for paired comparisons.
   stages, endurance budget, proximity fuze, and synthetic effectiveness
   scoring (fictional constants; legacy configs bit-identical)
 - Paired weaponeering parameter sweep in the Analysis workspace and CLI
+- Multi-contact autonomous engagement: anonymous multi-return tracking,
+  observable-only classification with a synthetic IFF analog, doctrine
+  TEWA selection with manual/autonomous authorization, engagement
+  correctness scoring, ambiguity presets, and a paired decision study
 - Opt-in full 3D tracked-target motion behind per-vehicle dynamics selection
 - 3D environment: water surface, seabed at the configured depth, depth ruler,
   exponential-fog perspective, and bounded allocation-free 3D trails
