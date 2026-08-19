@@ -355,6 +355,9 @@ export interface SensorObservation {
   sensorPosition: Vec2;
   sensorHeading: number;
   acoustic?: AcousticChannelState;
+  /** Echo-derived feature: implied target strength (dB) with spreading
+   *  removed. A measurement feature, not an identity. */
+  impliedTargetStrengthDb?: number;
 }
 
 export interface TrackEstimate {

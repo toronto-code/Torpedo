@@ -36,6 +36,7 @@ import {
   type ContactRuntime,
 } from "./contacts";
 import { SeekerModel, type SeekerContact } from "./sensor";
+import { MultiTargetTracker } from "./tracker";
 import { sixDofAttitude } from "./six-dof";
 import { perfectTrack, RawObservationTracker } from "./trackers";
 import type {
@@ -120,6 +121,7 @@ export class SimulationEngine {
     dropout: SeededRandom;
     channel: SeededRandom;
   }[] = [];
+  private tracker: MultiTargetTracker | null = null;
 
   constructor(readonly config: SimulationConfig) {
     validateConfig(config);
@@ -172,6 +174,17 @@ export class SimulationEngine {
       }));
       const primary = this.primaryContactRuntime();
       if (primary) this.target = primary.state;
+      if (config.guidance.mode === "raw" || config.guidance.mode === "ekf") {
+        this.tracker = new MultiTargetTracker(
+          {
+            estimator: config.estimator,
+            confirmationCount: 3,
+            tentativeTimeout: 4,
+            deletionTimeout: 10,
+          },
+          config.guidance.mode,
+        );
+      }
     }
     if (config.weapon) {
       this.weapon = config.weapon;
@@ -230,6 +243,17 @@ export class SimulationEngine {
   }
 
   private selectedTrack(): TrackEstimate | null {
+    if (this.tracker) {
+      // Interim selection: the most recently updated confirmed track.
+      // Phase 4 replaces this with doctrine-driven TEWA designation.
+      const tracks = this.tracker
+        .liveTracks(this.timestamp)
+        .filter((track) => track.meta.quality === "confirmed")
+        .sort(
+          (a, b) => b.meta.lastObservationAt - a.meta.lastObservationAt,
+        );
+      return tracks[0]?.estimate ?? null;
+    }
     switch (this.config.guidance.mode) {
       case "perfect":
         return perfectTrack(this.target, this.timestamp);
@@ -254,6 +278,7 @@ export class SimulationEngine {
   }
 
   private updateGuidance(): void {
+    if (this.tracker) this.tracker.prune(this.timestamp);
     const track = this.selectedTrack();
     if (this.weapon && this.homing) {
       this.updateWeaponPhase(track);
@@ -473,6 +498,12 @@ export class SimulationEngine {
     ) {
       const observation = this.pendingObservations.shift()!;
       this.latestObservation = observation;
+      if (this.tracker) {
+        const result = this.tracker.process(this.timestamp, observation);
+        if (result.accepted) this.observationsAccepted += 1;
+        else this.observationsRejected += 1;
+        continue;
+      }
       this.rawTracker.process(observation);
       const accepted = this.ekf.process(observation);
       if (accepted) this.observationsAccepted += 1;

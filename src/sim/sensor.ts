@@ -175,6 +175,14 @@ export class SeekerModel {
       sensorHeading: sensor.heading,
       acoustic: channel ?? undefined,
     };
+    if (channel && this.acoustic) {
+      // Echo-derived feature: recover the implied target strength by
+      // removing the (known) transmit level and spreading loss.
+      observation.impliedTargetStrengthDb =
+        channel.receivedEchoLevelDb -
+        this.acoustic.sourceLevelDb +
+        2 * channel.oneWayTransmissionLossDb;
+    }
     return { status: "locked", observation, acoustic: channel };
   }
 }
