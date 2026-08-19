@@ -25,11 +25,20 @@ const degrees = (value: number) => (value * 180) / Math.PI;
 
 export function App() {
   const [runtime, view] = useSimulation();
-  // The interactive default is the full 3D experience: six-DOF dynamics with
-  // the orbit camera. Headless/reference configurations remain planar.
+  // The interactive default is the full 3D experience: six-DOF dynamics,
+  // phased weapon engagement, and the orbit camera. Headless/reference
+  // configurations remain legacy planar.
   const [config, setConfig] = useState<SimulationConfig>(() => {
     const initial = createDefaultConfig();
     initial.dynamics.model = "six-dof";
+    initial.weapon = {
+      phases: { enableTime: 4, terminalRange: 400, reacquireAfter: 2 },
+      speed: { cruiseSpeed: 30, sprintSpeed: 40 },
+      endurance: { runTime: 90 },
+      terminalSensor: { cadenceHz: 20, innovationGate: 6 },
+      fuze: { detectionRadius: 18 },
+      effectiveness: { lethalRadius: 12, shape: 2 },
+    };
     return initial;
   });
   const [cameraMode, setCameraMode] = useState<CameraMode>("orbit");
@@ -326,6 +335,12 @@ export function App() {
               <span>closest approach {displayResult.closestApproach.toFixed(2)} m</span>
               <span>elapsed {displayResult.elapsedTime.toFixed(2)} s</span>
               <span>saturation {(displayResult.saturationFraction * 100).toFixed(1)}%</span>
+              {displayResult.fuzeMissDistance !== undefined && (
+                <span>fuze miss {displayResult.fuzeMissDistance.toFixed(2)} m</span>
+              )}
+              {displayResult.effectivenessScore !== undefined && (
+                <span>synthetic effectiveness {displayResult.effectivenessScore.toFixed(3)}</span>
+              )}
             </div>
           )}
         </section>

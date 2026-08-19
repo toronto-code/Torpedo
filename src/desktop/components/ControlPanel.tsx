@@ -31,6 +31,15 @@ interface Props {
 const radians = (value: number) => (value * Math.PI) / 180;
 const degrees = (value: number) => (value * 180) / Math.PI;
 
+const DEFAULT_WEAPON_PRESET: NonNullable<SimulationConfig["weapon"]> = {
+  phases: { enableTime: 4, terminalRange: 400, reacquireAfter: 2 },
+  speed: { cruiseSpeed: 30, sprintSpeed: 40 },
+  endurance: { runTime: 90 },
+  terminalSensor: { cadenceHz: 20, innovationGate: 6 },
+  fuze: { detectionRadius: 18 },
+  effectiveness: { lethalRadius: 12, shape: 2 },
+};
+
 function Choice<T extends string>({
   value,
   values,
@@ -132,6 +141,36 @@ export function ControlPanel(props: Props) {
           onChange={(value) => update((draft) => { draft.target.dynamicsModel = value; })}
           disabled={configLocked}
         />
+
+        <label>WEAPON ENGAGEMENT</label>
+        <Choice<"legacy" | "phased">
+          value={props.config.weapon ? "phased" : "legacy"}
+          values={[
+            { value: "legacy", label: "CONTINUOUS" },
+            { value: "phased", label: "PHASED" },
+          ]}
+          onChange={(value) => update((draft) => {
+            draft.weapon = value === "phased"
+              ? structuredClone(DEFAULT_WEAPON_PRESET)
+              : undefined;
+          })}
+          disabled={configLocked}
+        />
+        {props.config.weapon && (
+          <table className="config-table weapon-table">
+            <tbody>
+              <ParameterRow label="Enable time" value={props.config.weapon.phases?.enableTime ?? 0} unit="s" min={0} step={0.5} onChange={(value) => update((draft) => { draft.weapon!.phases ??= {}; draft.weapon!.phases.enableTime = Math.max(0, value); })} />
+              <ParameterRow label="Terminal range gate" value={props.config.weapon.phases?.terminalRange ?? 400} unit="m" min={0} step={25} onChange={(value) => update((draft) => { draft.weapon!.phases ??= {}; draft.weapon!.phases.terminalRange = Math.max(0, value); })} />
+              <ParameterRow label="Reacquire after" value={props.config.weapon.phases?.reacquireAfter ?? 2} unit="s" min={0} step={0.5} onChange={(value) => update((draft) => { draft.weapon!.phases ??= {}; draft.weapon!.phases.reacquireAfter = Math.max(0, value); })} />
+              <ParameterRow label="Cruise speed" value={props.config.weapon.speed?.cruiseSpeed ?? 30} unit="m/s" min={0.1} step={0.5} onChange={(value) => update((draft) => { draft.weapon!.speed ??= {}; draft.weapon!.speed.cruiseSpeed = Math.max(0.1, value); })} />
+              <ParameterRow label="Sprint speed" value={props.config.weapon.speed?.sprintSpeed ?? 40} unit="m/s" min={0.1} step={0.5} onChange={(value) => update((draft) => { draft.weapon!.speed ??= {}; draft.weapon!.speed.sprintSpeed = Math.max(0.1, value); })} />
+              <ParameterRow label="Endurance" value={props.config.weapon.endurance?.runTime ?? 90} unit="s" min={1} step={5} onChange={(value) => update((draft) => { draft.weapon!.endurance ??= {}; draft.weapon!.endurance.runTime = Math.max(1, value); })} />
+              <ParameterRow label="Terminal sensor cadence" value={props.config.weapon.terminalSensor?.cadenceHz ?? 20} unit="Hz" min={0.1} max={50} step={1} onChange={(value) => update((draft) => { draft.weapon!.terminalSensor ??= {}; draft.weapon!.terminalSensor.cadenceHz = Math.min(50, Math.max(0.1, value)); })} />
+              <ParameterRow label="Fuze detection radius" value={props.config.weapon.fuze?.detectionRadius ?? 18} unit="m" min={0} step={1} onChange={(value) => update((draft) => { draft.weapon!.fuze ??= {}; draft.weapon!.fuze.detectionRadius = Math.max(0, value); })} />
+              <ParameterRow label="Synthetic lethal radius" value={props.config.weapon.effectiveness?.lethalRadius ?? 12} unit="m" min={0.1} step={1} onChange={(value) => update((draft) => { draft.weapon!.effectiveness ??= {}; draft.weapon!.effectiveness.lethalRadius = Math.max(0.1, value); })} />
+            </tbody>
+          </table>
+        )}
 
         <label>CONTROLLER</label>
         <Choice<GuidanceLaw>

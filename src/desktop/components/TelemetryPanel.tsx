@@ -107,6 +107,23 @@ export function TelemetryPanel({ snapshot, config }: Props) {
         </div>
       )}
 
+      {snapshot?.weapon && (
+        <div className="vehicle-state">
+          <div className="table-subtitle">WEAPON ENGAGEMENT</div>
+          <div className="track-state-strip">
+            <span>PHASE <strong>{snapshot.weapon.phase.toUpperCase()}</strong></span>
+            <span>FUZE <strong>{snapshot.weapon.armed ? "ARMED" : "SAFE"}</strong></span>
+            {snapshot.weapon.enduranceRemaining !== null && (
+              <span>ENDURANCE <strong>{value(snapshot.weapon.enduranceRemaining, 0)} s</strong></span>
+            )}
+            <span>COMMAND SPEED <strong>{value(snapshot.weapon.commandedSpeed, 1)} m/s</strong></span>
+            {snapshot.weapon.trackLostFor !== null && snapshot.weapon.trackLostFor > 0.5 && (
+              <span>TRACK LOST <strong>{value(snapshot.weapon.trackLostFor, 1)} s</strong></span>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="track-vector">
         <span>ESTIMATED TRACK · NED HORIZONTAL</span>
         <code>

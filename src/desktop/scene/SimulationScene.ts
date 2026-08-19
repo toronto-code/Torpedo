@@ -281,6 +281,8 @@ export class SimulationScene {
   private readonly target = createVehicle(0xe7b97c, true);
   private readonly estimate = createMarker(0x53b8ff, 8);
   private readonly observation = createMarker(0xffd166, 5);
+  private readonly enablePoint = createMarker(0x9bd4a8, 6);
+  private readonly interceptPoint = createMarker(0xc79bd4, 6);
   private readonly seeker = createSeekerSector();
   private readonly covariance = new THREE.LineLoop(
     new THREE.BufferGeometry(),
@@ -363,6 +365,8 @@ export class SimulationScene {
       this.target,
       this.estimate,
       this.observation,
+      this.enablePoint,
+      this.interceptPoint,
       this.seeker,
       this.covariance,
       this.cpaLine,
@@ -374,6 +378,8 @@ export class SimulationScene {
     );
     this.estimate.visible = false;
     this.observation.visible = false;
+    this.enablePoint.visible = false;
+    this.interceptPoint.visible = false;
     this.target.visible = options.showTruth;
     updateSeekerSector(this.seeker, options.fovHalfAngle);
 
@@ -707,6 +713,22 @@ export class SimulationScene {
     if (estimate) {
       toRenderHorizontalInto(estimate.position, contact.position.y, scratchDesired);
       this.estimate.position.copy(scratchDesired);
+    }
+    // Frozen fire-control solution symbology (estimate data, not truth).
+    const weapon = this.current.weapon;
+    if (weapon?.enablePoint) {
+      this.enablePoint.visible = true;
+      toRenderHorizontalInto(weapon.enablePoint, own.position.y, scratchDesired);
+      this.enablePoint.position.copy(scratchDesired);
+    } else {
+      this.enablePoint.visible = false;
+    }
+    if (weapon?.interceptPoint) {
+      this.interceptPoint.visible = true;
+      toRenderHorizontalInto(weapon.interceptPoint, own.position.y, scratchDesired);
+      this.interceptPoint.position.copy(scratchDesired);
+    } else {
+      this.interceptPoint.visible = false;
     }
     const observation = this.current.observation;
     this.observation.visible = Boolean(observation);
