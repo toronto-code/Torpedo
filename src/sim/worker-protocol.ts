@@ -15,6 +15,7 @@ export type SimulationWorkerRequest =
   | { type: "step" }
   | { type: "reset" }
   | { type: "set-time-scale"; timeScale: number }
+  | { type: "authorize" }
   | { type: "ping"; nonce: number };
 
 export type SimulationWorkerResponse =

@@ -124,6 +124,28 @@ export function TelemetryPanel({ snapshot, config }: Props) {
         </div>
       )}
 
+      {snapshot?.engagement && (
+        <div className="vehicle-state">
+          <div className="table-subtitle">ENGAGEMENT AUTHORITY · {snapshot.engagement.authorized ? "AUTHORIZED" : "HOLD FIRE"}</div>
+          <table className="config-table">
+            <thead>
+              <tr><th>TRK</th><th>QUALITY</th><th>CLASS</th><th>CONF</th><th>RANGE</th></tr>
+            </thead>
+            <tbody>
+              {snapshot.engagement.tracks.map((track) => (
+                <tr key={track.trackId} className={track.trackId === snapshot.engagement!.designatedTrackId ? "designated" : ""}>
+                  <td>#{track.trackId}{track.trackId === snapshot.engagement!.designatedTrackId ? " ★" : ""}</td>
+                  <td>{track.quality}</td>
+                  <td>{track.classification}</td>
+                  <td>{(track.confidence * 100).toFixed(0)}%</td>
+                  <td>{track.range.toFixed(0)} m</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="track-vector">
         <span>ESTIMATED TRACK · NED HORIZONTAL</span>
         <code>

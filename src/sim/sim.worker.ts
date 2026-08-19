@@ -124,6 +124,9 @@ context.onmessage = (event: MessageEvent<SimulationWorkerRequest>) => {
       case "set-time-scale":
         timeScale = Math.max(0.1, message.timeScale);
         break;
+      case "authorize":
+        engine?.authorize();
+        break;
       case "ping":
         post({ type: "pong", nonce: message.nonce });
         break;

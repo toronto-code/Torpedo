@@ -51,6 +51,7 @@ import { perfectTrack, RawObservationTracker } from "./trackers";
 import type {
   ConsistencySample,
   ContactTruth,
+  EngagementTelemetry,
   EngineStep,
   ExperimentResult,
   GuidanceCommand,
@@ -674,6 +675,24 @@ export class SimulationEngine {
     };
   }
 
+  private buildEngagementTelemetry(): EngagementTelemetry | undefined {
+    if (!this.contactRuntimes) return undefined;
+    return {
+      authorized: this.tewa.authorized,
+      designatedTrackId: this.tewa.designation?.trackId ?? null,
+      tracks: this.lastCandidates.map((candidate) => ({
+        trackId: candidate.trackId,
+        quality: candidate.quality,
+        classification: candidate.classification.best,
+        confidence: candidate.classification.confidence,
+        range: Math.hypot(
+          candidate.estimate.position.x - this.torpedo.position.x,
+          candidate.estimate.position.y - this.torpedo.position.y,
+        ),
+      })),
+    };
+  }
+
   private buildContactTruth(): ContactTruth[] | undefined {
     if (!this.contactRuntimes) return undefined;
     return this.contactRuntimes.map((runtime) => ({
@@ -731,6 +750,7 @@ export class SimulationEngine {
       seekerStatus: this.seekerStatus,
       weapon: sample.weapon,
       contacts: sample.contacts,
+      engagement: this.buildEngagementTelemetry(),
       acoustic: this.latestAcoustic,
     };
   }

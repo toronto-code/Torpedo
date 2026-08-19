@@ -22,6 +22,7 @@ export type ReplayEventKind =
   | "config-change"
   | "camera-change"
   | "overlay-change"
+  | "authorize"
   | "worker-failure"
   | "worker-recovered"
   | "replay-loaded"

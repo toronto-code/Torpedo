@@ -6,6 +6,7 @@ import { parseReplay, serializeReplay } from "../replay/codec";
 import { telemetryThroughTime } from "../replay/timeline";
 import type { ReplayFile, ReplayVerification } from "../replay/types";
 import { createDefaultConfig, hashConfig } from "../sim/config";
+import { createAmbiguityScenarioConfig } from "../sim/scenarios";
 import { telemetryToCsv } from "../sim/csv";
 import type { SimulationConfig } from "../sim/types";
 import { AnalysisPanel } from "./components/AnalysisPanel";
@@ -31,7 +32,7 @@ export function App() {
   // phased weapon engagement, and the orbit camera. Headless/reference
   // configurations remain legacy planar.
   const [config, setConfig] = useState<SimulationConfig>(() => {
-    const initial = createDefaultConfig();
+    const initial = createAmbiguityScenarioConfig("high-ambiguity");
     initial.dynamics.model = "six-dof";
     initial.weapon = {
       phases: { enableTime: 4, terminalRange: 400, reacquireAfter: 2 },
@@ -337,6 +338,9 @@ export function App() {
             replayHistory={replayHistory}
           />
           <div className="camera-select" role="group" aria-label="Camera mode">
+            {config.doctrine?.mode === "manual" && (
+              <button type="button" onClick={() => runtime.authorize()}>AUTHORIZE</button>
+            )}
             {(["orbit", "chase", "tactical", "seeker"] as const).map((mode) => (
               <button
                 key={mode}
@@ -372,6 +376,9 @@ export function App() {
               <span>closest approach {displayResult.closestApproach.toFixed(2)} m</span>
               <span>elapsed {displayResult.elapsedTime.toFixed(2)} s</span>
               <span>saturation {(displayResult.saturationFraction * 100).toFixed(1)}%</span>
+              {displayResult.engagedContact && (
+                <span>engaged {displayResult.engagedContact.id} · {displayResult.engagementOutcome}</span>
+              )}
               {displayResult.fuzeMissDistance !== undefined && (
                 <span>fuze miss {displayResult.fuzeMissDistance.toFixed(2)} m</span>
               )}

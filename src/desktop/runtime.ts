@@ -211,6 +211,12 @@ export class SimulationRuntime {
     this.send({ type: "set-time-scale", timeScale });
   }
 
+  /** Forwards an operator engagement authorization to the engine. */
+  authorize(): void {
+    this.recordUserEvent("authorize", {});
+    this.send({ type: "authorize" });
+  }
+
   recordConfigChange(before: SimulationConfig, after: SimulationConfig): void {
     for (const entry of configDifferences(before, after)) {
       this.recordUserEvent("config-change", {

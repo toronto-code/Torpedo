@@ -1,6 +1,8 @@
 export { createDefaultConfig, createPortfolioDemoConfig, hashConfig, validateConfig } from "./config";
 export { acousticChannel, soundSpeedMackenzie, thorpAbsorptionDbPerKm } from "./acoustics";
 export { solveIntercept, launchEnvelope } from "./intercept";
+export { createAmbiguityScenarioConfig } from "./scenarios";
+export type { AmbiguityPreset } from "./scenarios";
 export type { InterceptSolution, LaunchEnvelope, InterceptInput } from "./intercept";
 export {
   assessFireability,

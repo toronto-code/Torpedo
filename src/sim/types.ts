@@ -428,6 +428,20 @@ export interface EngagementMetrics {
   predictedTimeToCpa: number;
 }
 
+/** Multi-contact engagement state for display: the classified track table
+ *  and authorization status. Estimate data only — no truth identity. */
+export interface EngagementTelemetry {
+  authorized: boolean;
+  designatedTrackId: number | null;
+  tracks: {
+    trackId: number;
+    quality: string;
+    classification: string;
+    confidence: number;
+    range: number;
+  }[];
+}
+
 /** Per-sample weapon engagement state; present only with a weapon block. */
 export interface WeaponTelemetry {
   phase: HomingPhase;
@@ -475,6 +489,7 @@ export interface RenderSnapshot {
   seekerStatus: SeekerStatus;
   weapon?: WeaponTelemetry;
   contacts?: ContactTruth[];
+  engagement?: EngagementTelemetry;
   acoustic?: AcousticChannelState | null;
 }
 
