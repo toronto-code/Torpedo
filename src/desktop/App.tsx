@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import type { FidelityStudyReport, MonteCarloReport } from "../analysis/types";
+import type { WeaponeeringReport } from "../analysis/weaponeering";
 import { parseReplay, serializeReplay } from "../replay/codec";
 import { telemetryThroughTime } from "../replay/timeline";
 import type { ReplayFile, ReplayVerification } from "../replay/types";
@@ -15,9 +16,10 @@ import { ReplayTimeline } from "./components/ReplayTimeline";
 import { SimulationViewport } from "./components/SimulationViewport";
 import type { CameraMode } from "./scene/SimulationScene";
 import { TelemetryPanel } from "./components/TelemetryPanel";
+import { WeaponeeringPanel } from "./components/WeaponeeringPanel";
 import { exportText } from "./export";
 import { runFidelityAnalysis } from "./fidelityAnalysis";
-import { runAnalysis, type AnalysisProgress } from "./monteCarlo";
+import { runAnalysis, runWeaponeeringAnalysis, type AnalysisProgress } from "./monteCarlo";
 import { verifyReplayAsync } from "./replayVerification";
 import { useSimulation } from "./useSimulation";
 
@@ -54,6 +56,10 @@ export function App() {
   const [fidelityRunning, setFidelityRunning] = useState(false);
   const [fidelityProgress, setFidelityProgress] = useState<AnalysisProgress | null>(null);
   const [fidelityReport, setFidelityReport] = useState<FidelityStudyReport | null>(null);
+  const [weaponeeringRuns, setWeaponeeringRuns] = useState(6);
+  const [weaponeeringRunning, setWeaponeeringRunning] = useState(false);
+  const [weaponeeringProgress, setWeaponeeringProgress] = useState<AnalysisProgress | null>(null);
+  const [weaponeeringReport, setWeaponeeringReport] = useState<WeaponeeringReport | null>(null);
   const [activeReplay, setActiveReplay] = useState<ReplayFile | null>(null);
   const [replayFrameIndex, setReplayFrameIndex] = useState(0);
   const [verification, setVerification] = useState<ReplayVerification | null>(null);
@@ -211,6 +217,37 @@ export function App() {
         JSON.stringify(fidelityReport, null, 2),
       );
       setNotice(`Fidelity report exported: ${location}`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const runWeaponeering = async () => {
+    if (!config.weapon) {
+      setNotice("Weaponeering requires a PHASED weapon configuration.");
+      return;
+    }
+    setWeaponeeringRunning(true);
+    setWeaponeeringProgress({ completed: 0, total: weaponeeringRuns * 6 });
+    try {
+      const next = await runWeaponeeringAnalysis(weaponeeringRuns, config, setWeaponeeringProgress);
+      setWeaponeeringReport(next);
+      setNotice(`Weaponeering sweep completed: ${next.variants.length} variants × ${next.runsPerVariant} runs.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      setWeaponeeringRunning(false);
+    }
+  };
+
+  const exportWeaponeering = async () => {
+    if (!weaponeeringReport) return;
+    try {
+      const location = await exportText(
+        `weaponeering-${weaponeeringReport.baseSeed}-${weaponeeringReport.configHash}.json`,
+        JSON.stringify(weaponeeringReport, null, 2),
+      );
+      setNotice(`Weaponeering report exported: ${location}`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
     }
@@ -425,6 +462,15 @@ export function App() {
               onRunCount={setFidelityRuns}
               onRun={runFidelity}
               onExport={exportFidelity}
+            />
+            <WeaponeeringPanel
+              running={weaponeeringRunning}
+              progress={weaponeeringProgress}
+              report={weaponeeringReport}
+              runCount={weaponeeringRuns}
+              onRunCount={setWeaponeeringRuns}
+              onRun={runWeaponeering}
+              onExport={exportWeaponeering}
             />
             <section className="qualification-panel panel">
               <div className="panel-title"><span>MODEL QUALIFICATION BASIS</span><span>STATUS: RESEARCH ONLY</span></div>

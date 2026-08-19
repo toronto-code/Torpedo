@@ -1,9 +1,11 @@
 import type { MonteCarloReport } from "../analysis/types";
+import type { WeaponeeringReport } from "../analysis/weaponeering";
 import type { SimulationConfig } from "../sim/types";
 
 type AnalysisResponse =
   | { type: "progress"; completed: number; total: number }
-  | { type: "result"; report: MonteCarloReport }
+  | { type: "result"; kind: "monte-carlo"; report: MonteCarloReport }
+  | { type: "result"; kind: "weaponeering"; report: WeaponeeringReport }
   | { type: "error"; message: string };
 
 export interface AnalysisProgress {
@@ -11,11 +13,10 @@ export interface AnalysisProgress {
   total: number;
 }
 
-export function runAnalysis(
-  runs: number,
-  config: SimulationConfig,
+function startWorker(
+  request: { kind: "monte-carlo" | "weaponeering"; runs: number; config: SimulationConfig },
   onProgress: (progress: AnalysisProgress) => void,
-): Promise<MonteCarloReport> {
+): Promise<AnalysisResponse & { type: "result" }> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL("./analysis.worker.ts", import.meta.url), {
       type: "module",
@@ -27,7 +28,7 @@ export function runAnalysis(
         onProgress(message);
       } else if (message.type === "result") {
         worker.terminate();
-        resolve(message.report);
+        resolve(message);
       } else {
         worker.terminate();
         reject(new Error(message.message));
@@ -37,6 +38,24 @@ export function runAnalysis(
       worker.terminate();
       reject(new Error(event.message));
     };
-    worker.postMessage({ runs, config });
+    worker.postMessage(request);
   });
+}
+
+export function runAnalysis(
+  runs: number,
+  config: SimulationConfig,
+  onProgress: (progress: AnalysisProgress) => void,
+): Promise<MonteCarloReport> {
+  return startWorker({ kind: "monte-carlo", runs, config }, onProgress)
+    .then((message) => message.report as MonteCarloReport);
+}
+
+export function runWeaponeeringAnalysis(
+  runs: number,
+  config: SimulationConfig,
+  onProgress: (progress: AnalysisProgress) => void,
+): Promise<WeaponeeringReport> {
+  return startWorker({ kind: "weaponeering", runs, config }, onProgress)
+    .then((message) => message.report as WeaponeeringReport);
 }
