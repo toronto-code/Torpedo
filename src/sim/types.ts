@@ -27,6 +27,70 @@ export type ScenarioKind =
   | "constant-turn"
   | "scripted-evasive";
 
+export type HomingPhase = "run-out" | "homing" | "terminal" | "reacquisition";
+
+export interface WeaponPhasesConfig {
+  /** Run-out duration before homing enables (s). */
+  enableTime?: number;
+  /** Alternative to enableTime: along-track run-out distance (m). */
+  enableDistance?: number;
+  /** Estimated range gate (m) that starts the terminal phase. */
+  terminalRange?: number;
+  /** Seconds of lost track before the reacquisition search begins. */
+  reacquireAfter?: number;
+  /** Deterministic loiter turn rate during reacquisition (rad/s). */
+  searchTurnRate?: number;
+}
+
+export interface WeaponSpeedConfig {
+  /** Commanded speed during run-out and midcourse homing (m/s). */
+  cruiseSpeed?: number;
+  /** Commanded sprint speed in the terminal phase (m/s). */
+  sprintSpeed?: number;
+}
+
+export interface WeaponEnduranceConfig {
+  /** Total powered run time from launch (s). */
+  runTime?: number;
+}
+
+export interface WeaponTerminalSensorConfig {
+  /** Seeker cadence during the terminal phase (Hz, <= 50). */
+  cadenceHz?: number;
+  /** Stricter association gate applied to estimate NIS in terminal. */
+  innovationGate?: number;
+}
+
+export interface FuzeConfig {
+  /** True 3D proximity trigger radius (m). */
+  detectionRadius?: number;
+  /** Seeded actuation jitter on the trigger radius (m, default 0). */
+  jitter?: number;
+  /** Seconds after launch before the fuze arms (defaults to enable time). */
+  armDelay?: number;
+}
+
+export interface EffectivenessConfig {
+  /** Fictional 50%-effectiveness miss distance scale (m). */
+  lethalRadius?: number;
+  /** Shape exponent of the synthetic effectiveness function. */
+  shape?: number;
+}
+
+/**
+ * Optional phased-weapon engagement configuration. Absent block keeps the
+ * legacy continuous-guidance behavior bit-identical: termination stays the
+ * plain intercept radius and no fuze or effectiveness scoring exists.
+ */
+export interface WeaponSystemConfig {
+  phases?: WeaponPhasesConfig;
+  speed?: WeaponSpeedConfig;
+  endurance?: WeaponEnduranceConfig;
+  terminalSensor?: WeaponTerminalSensorConfig;
+  fuze?: FuzeConfig;
+  effectiveness?: EffectivenessConfig;
+}
+
 export type SeekerStatus =
   | "searching"
   | "locked"
@@ -200,6 +264,7 @@ export interface SimulationConfig {
   guidance: GuidanceConfig;
   scenario: ScenarioConfig;
   dynamics: DynamicsConfig;
+  weapon?: WeaponSystemConfig;
   environment?: EnvironmentConfig;
   acoustic?: AcousticConfig;
   interceptRadius: number;
@@ -289,6 +354,20 @@ export interface EngagementMetrics {
   predictedTimeToCpa: number;
 }
 
+/** Per-sample weapon engagement state; present only with a weapon block. */
+export interface WeaponTelemetry {
+  phase: HomingPhase;
+  phaseEnteredAt: number;
+  /** Seconds since the track was last usable (null when never usable). */
+  trackLostFor: number | null;
+  enduranceRemaining: number | null;
+  armed: boolean;
+  commandedSpeed: number;
+  /** Frozen launch solution advisory (estimate symbology, not truth). */
+  enablePoint: Vec2 | null;
+  interceptPoint: Vec2 | null;
+}
+
 export interface TelemetrySample {
   timestamp: number;
   torpedo: VehicleState;
@@ -300,6 +379,7 @@ export interface TelemetrySample {
   estimationPositionError: number | null;
   covarianceTrace: number | null;
   nees: number | null;
+  weapon?: WeaponTelemetry;
   acoustic?: AcousticChannelState | null;
 }
 
@@ -318,10 +398,16 @@ export interface RenderSnapshot {
   guidance: GuidanceCommand;
   metrics: EngagementMetrics;
   seekerStatus: SeekerStatus;
+  weapon?: WeaponTelemetry;
   acoustic?: AcousticChannelState | null;
 }
 
-export type TerminationReason = "intercept" | "timeout" | "invalid-state";
+export type TerminationReason =
+  | "intercept"
+  | "timeout"
+  | "invalid-state"
+  | "fuzed-detonation"
+  | "endurance-exhausted";
 
 export interface ExperimentResult {
   seed: number;
@@ -344,6 +430,12 @@ export interface ExperimentResult {
   meanActuatorTrackingError: number;
   maximumRoll: number;
   maximumPitch: number;
+  /** Weapon engagement timeline; present only with a weapon block. */
+  phaseTimeline?: { phase: HomingPhase; startedAt: number; reason: string }[];
+  /** True 3D separation at fuze actuation (m). */
+  fuzeMissDistance?: number;
+  /** Synthetic effectiveness score in [0, 1]; fictional calibration. */
+  effectivenessScore?: number;
 }
 
 export interface EngineStep {

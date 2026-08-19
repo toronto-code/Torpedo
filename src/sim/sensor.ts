@@ -20,6 +20,7 @@ export interface SensorSample {
 export class SeekerModel {
   private nextSampleTime = 0;
   private observationId = 0;
+  private cadenceHz: number;
 
   constructor(
     private readonly config: SensorConfig,
@@ -28,7 +29,24 @@ export class SeekerModel {
     private readonly environment?: EnvironmentConfig,
     private readonly acoustic?: AcousticConfig,
     private readonly channelRandom?: SeededRandom,
-  ) {}
+  ) {
+    this.cadenceHz = config.cadenceHz;
+  }
+
+  /**
+   * Switches the sampling cadence (e.g. a terminal-phase preset). Scheduling
+   * stays tick-driven: the next sample time only moves closer to
+   * atTimestamp + one period, so observedAt/deliveredAt ordering remains
+   * strictly monotonic across a switch.
+   */
+  setCadence(cadenceHz: number, atTimestamp: number): void {
+    if (cadenceHz === this.cadenceHz) return;
+    this.cadenceHz = cadenceHz;
+    this.nextSampleTime = Math.min(
+      this.nextSampleTime,
+      atTimestamp + 1 / cadenceHz,
+    );
+  }
 
   sample(
     timestamp: number,
@@ -36,7 +54,7 @@ export class SeekerModel {
     target: VehicleState,
   ): SensorSample | null {
     if (timestamp + 1e-10 < this.nextSampleTime) return null;
-    this.nextSampleTime += 1 / this.config.cadenceHz;
+    this.nextSampleTime += 1 / this.cadenceHz;
 
     const relative = subtract2(target.position, sensor.position);
     const range = magnitude2(relative);

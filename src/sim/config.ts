@@ -343,6 +343,52 @@ export function validateConfig(config: SimulationConfig): void {
   if (!["planar-2.5d", "six-dof"].includes(config.dynamics.model)) {
     throw new Error("Unknown dynamics model.");
   }
+  if (config.weapon) {
+    const weapon = config.weapon;
+    const phases = weapon.phases;
+    if (phases) {
+      if (phases.enableTime !== undefined && phases.enableDistance !== undefined) {
+        throw new Error("weapon.phases: specify enableTime or enableDistance, not both.");
+      }
+      nonnegative("weapon.phases.enableTime", phases.enableTime ?? 0);
+      nonnegative("weapon.phases.enableDistance", phases.enableDistance ?? 0);
+      nonnegative("weapon.phases.terminalRange", phases.terminalRange ?? 0);
+      nonnegative("weapon.phases.reacquireAfter", phases.reacquireAfter ?? 0);
+      finite("weapon.phases.searchTurnRate", phases.searchTurnRate ?? 0);
+    }
+    for (const [name, value] of [
+      ["cruiseSpeed", weapon.speed?.cruiseSpeed],
+      ["sprintSpeed", weapon.speed?.sprintSpeed],
+    ] as const) {
+      if (value !== undefined) {
+        positive(`weapon.speed.${name}`, value);
+        if (value > config.torpedo.parameters.maxSpeed) {
+          throw new Error(`weapon.speed.${name} exceeds torpedo maxSpeed.`);
+        }
+      }
+    }
+    if (weapon.endurance?.runTime !== undefined) {
+      positive("weapon.endurance.runTime", weapon.endurance.runTime);
+    }
+    if (weapon.terminalSensor?.cadenceHz !== undefined) {
+      positive("weapon.terminalSensor.cadenceHz", weapon.terminalSensor.cadenceHz);
+      if (weapon.terminalSensor.cadenceHz > 50) {
+        throw new Error("weapon.terminalSensor.cadenceHz must be within (0, 50].");
+      }
+    }
+    if (weapon.terminalSensor?.innovationGate !== undefined) {
+      positive("weapon.terminalSensor.innovationGate", weapon.terminalSensor.innovationGate);
+    }
+    nonnegative("weapon.fuze.detectionRadius", weapon.fuze?.detectionRadius ?? 0);
+    nonnegative("weapon.fuze.jitter", weapon.fuze?.jitter ?? 0);
+    nonnegative("weapon.fuze.armDelay", weapon.fuze?.armDelay ?? 0);
+    if (weapon.effectiveness?.lethalRadius !== undefined) {
+      positive("weapon.effectiveness.lethalRadius", weapon.effectiveness.lethalRadius);
+    }
+    if (weapon.effectiveness?.shape !== undefined) {
+      positive("weapon.effectiveness.shape", weapon.effectiveness.shape);
+    }
+  }
   const sixDof = config.dynamics.sixDof;
   const six = sixDof.parameters;
   if (sixDof.profile && !["generic-fictional", "bluerov2-heavy-2024"].includes(sixDof.profile)) {
