@@ -408,6 +408,22 @@ export function validateConfig(config: SimulationConfig): void {
     if (weapon.endurance?.runTime !== undefined) {
       positive("weapon.endurance.runTime", weapon.endurance.runTime);
     }
+    const battery = weapon.endurance?.battery;
+    if (battery) {
+      positive("weapon.endurance.battery.capacityWs", battery.capacityWs);
+      nonnegative("weapon.endurance.battery.hotelW", battery.hotelW);
+      positive("weapon.endurance.battery.dragKW", battery.dragKW);
+    }
+    if (config.sensor.selfNoise) {
+      finite("sensor.selfNoise.baseDb", config.sensor.selfNoise.baseDb);
+      nonnegative("sensor.selfNoise.dbPerMs", config.sensor.selfNoise.dbPerMs);
+    }
+    for (const contact of config.contacts ?? []) {
+      if (contact.aspectEcho) {
+        finite(`contacts.${contact.id}.aspectEcho.bowDb`, contact.aspectEcho.bowDb);
+        finite(`contacts.${contact.id}.aspectEcho.beamDb`, contact.aspectEcho.beamDb);
+      }
+    }
     if (weapon.terminalSensor?.cadenceHz !== undefined) {
       positive("weapon.terminalSensor.cadenceHz", weapon.terminalSensor.cadenceHz);
       if (weapon.terminalSensor.cadenceHz > 50) {

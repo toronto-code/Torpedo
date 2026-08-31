@@ -33,6 +33,7 @@ import {
   activateDecoy,
   contactControl,
   createContactRuntime,
+  effectiveTargetStrength,
   type ContactRuntime,
 } from "./contacts";
 import { SeekerModel, type SeekerContact } from "./sensor";
@@ -124,6 +125,7 @@ export class SimulationEngine {
   private homing: HomingState | null = null;
   private fuzeState: FuzeState | null = null;
   private distanceTravelled = 0;
+  private energyRemainingWs: number | null = null;
   // Multi-contact state; null keeps the legacy single-target path.
   private readonly contactRuntimes: ContactRuntime[] | null = null;
   private readonly contactStreams: {
@@ -207,6 +209,7 @@ export class SimulationEngine {
     }
     if (config.weapon) {
       this.weapon = config.weapon;
+      this.energyRemainingWs = config.weapon.endurance?.battery?.capacityWs ?? null;
       this.homing = initialHomingState();
       this.fuzeState = { armed: false };
       this.fuzeArmAt = fuzeArmedAt(config.weapon);
@@ -310,7 +313,11 @@ export class SimulationEngine {
         const trackId = -(index + 1);
         const estimate = perfectTrack(runtime.state, this.timestamp);
         const features: TrackFeatures = {
-          impliedTargetStrengthDb: runtime.spec.targetStrengthDb ?? null,
+          impliedTargetStrengthDb: effectiveTargetStrength(
+            runtime,
+            { x: this.torpedo.position.x, y: this.torpedo.position.y },
+            this.config.acoustic?.targetStrengthDb ?? 0,
+          ),
           snrDb: null,
           signatureCorrelation: runtime.spec.friendlySignature ?? 0.1,
           observationCount: 1,
@@ -636,13 +643,19 @@ export class SimulationEngine {
 
   private sampleAndDeliverObservations(): void {
     if (this.contactRuntimes) {
+      const weaponPosition = {
+        x: this.torpedo.position.x,
+        y: this.torpedo.position.y,
+      };
       const seekerContacts: SeekerContact[] = this.contactRuntimes
         .filter((runtime) => runtime.active)
         .map((runtime) => ({
           state: runtime.state,
-          targetStrengthDb: runtime.spec.targetStrengthDb
-            ?? this.config.acoustic?.targetStrengthDb
-            ?? 0,
+          targetStrengthDb: effectiveTargetStrength(
+            runtime,
+            weaponPosition,
+            this.config.acoustic?.targetStrengthDb ?? 0,
+          ),
           echoFluctuation: runtime.spec.echoFluctuation,
           friendlySignature: runtime.spec.friendlySignature,
         }));
@@ -723,9 +736,18 @@ export class SimulationEngine {
       phaseEnteredAt: this.homing.enteredPhaseAt,
       trackLostFor: lastUsable === null ? null : this.timestamp - lastUsable,
       enduranceRemaining:
-        this.weapon.endurance?.runTime !== undefined
-          ? this.weapon.endurance.runTime - this.timestamp
-          : null,
+        this.weapon.endurance?.battery !== undefined &&
+          this.energyRemainingWs !== null
+          ? this.energyRemainingWs /
+            Math.max(
+              1e-6,
+              this.weapon.endurance.battery.hotelW +
+                this.weapon.endurance.battery.dragKW *
+                  this.torpedo.speed ** 3,
+            )
+          : this.weapon.endurance?.runTime !== undefined
+            ? this.weapon.endurance.runTime - this.timestamp
+            : null,
       armed: this.fuzeState?.armed ?? false,
       commandedSpeed: this.torpedoControl.speedCommand,
       enablePoint: this.enablePointAbsolute,
@@ -951,6 +973,11 @@ export class SimulationEngine {
       );
     }
     this.tick += 1;
+    const battery = this.weapon?.endurance?.battery;
+    if (battery && this.energyRemainingWs !== null) {
+      this.energyRemainingWs -=
+        (battery.hotelW + battery.dragKW * this.torpedo.speed ** 3) * this.dt;
+    }
     this.distanceTravelled += Math.hypot(
       this.torpedo.position.x - previousTorpedoPosition.x,
       this.torpedo.position.y - previousTorpedoPosition.y,
@@ -1026,8 +1053,12 @@ export class SimulationEngine {
         this.fuzeRandom ?? undefined,
       );
     const exhausted =
-      this.weapon?.endurance?.runTime !== undefined &&
-      this.timestamp >= this.weapon.endurance.runTime;
+      (this.weapon?.endurance?.battery !== undefined &&
+        this.energyRemainingWs !== null &&
+        this.energyRemainingWs <= 0) ||
+      (this.weapon?.endurance?.battery === undefined &&
+        this.weapon?.endurance?.runTime !== undefined &&
+        this.timestamp >= this.weapon.endurance.runTime);
     // Multi-contact termination uses the nearest true contact (proximity
     // scoring, like the fuze); legacy keeps the designated single target.
     if (!isFiniteArray(stateValues)) this.finish("invalid-state", sample);

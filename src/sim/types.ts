@@ -54,6 +54,11 @@ export interface ContactSpec {
   targetStrengthDb?: number;
   /** Deterministic echo-strength fluctuation (dB) for ambiguous contacts. */
   echoFluctuation?: { amplitudeDb: number; period: number };
+  /** Aspect-dependent echo: TS = bow + (beam - bow) * sin^2(aspect), where
+   *  aspect is the angle between the contact's heading and the line to the
+   *  weapon. Decoys without this stay aspect-invariant — a discrimination
+   *  cue. Overrides targetStrengthDb when present. */
+  aspectEcho?: { bowDb: number; beamDb: number };
   behavior?: ContactBehavior;
   /** Contact that launches this decoy once the weapon closes (decoys only). */
   deployedBy?: string;
@@ -114,8 +119,18 @@ export interface WeaponSpeedConfig {
 }
 
 export interface WeaponEnduranceConfig {
-  /** Total powered run time from launch (s). */
+  /** Total powered run time from launch (s). Legacy time budget. */
   runTime?: number;
+  /** Optional energy-budget endurance: drains with speed-cubed drag power
+   *  plus a hotel load. When present it replaces the time budget. */
+  battery?: {
+    /** Fictional usable energy (watt-seconds). */
+    capacityWs: number;
+    /** Constant electronics load (W). */
+    hotelW: number;
+    /** Drag power coefficient: P = dragKW * speed^3 (W). */
+    dragKW: number;
+  };
 }
 
 export interface WeaponTerminalSensorConfig {
@@ -214,6 +229,13 @@ export interface VehicleConfig {
   dynamicsModel?: DynamicsModel;
 }
 
+export interface SelfNoiseConfig {
+  /** Receiver self-noise floor at zero speed (dB). */
+  baseDb: number;
+  /** Self-noise increase per m/s of own speed (dB per m/s). */
+  dbPerMs: number;
+}
+
 export interface SensorConfig {
   cadenceHz: number;
   fovHalfAngle: number;
@@ -224,6 +246,8 @@ export interface SensorConfig {
   rangeSigmaPerMeter: number;
   dropoutProbability: number;
   latency: number;
+  /** Optional speed-dependent self-noise; absent keeps the legacy channel. */
+  selfNoise?: SelfNoiseConfig;
 }
 
 export interface EnvironmentConfig {

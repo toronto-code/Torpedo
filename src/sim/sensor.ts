@@ -136,6 +136,19 @@ export class SeekerModel {
   ): SensorSample {
     const relative = subtract2(target.position, sensor.position);
     const range = magnitude2(relative);
+    // Speed-dependent self-noise: own flow noise adds (power-summed) to the
+    // ambient level, degrading detection as the weapon speeds up. Absent
+    // config keeps the legacy ambient term exactly.
+    let ambientDb = this.acoustic?.ambientNoiseDb ?? 0;
+    const selfNoise = this.config.selfNoise;
+    if (this.acoustic && selfNoise) {
+      const selfDb = selfNoise.baseDb + selfNoise.dbPerMs * sensor.speed;
+      ambientDb =
+        10 *
+        Math.log10(
+          10 ** (this.acoustic.ambientNoiseDb / 10) + 10 ** (selfDb / 10),
+        );
+    }
     const channel = this.environment && this.acoustic?.enabled
       ? acousticChannel(
           timestamp,
@@ -143,15 +156,16 @@ export class SeekerModel {
           sensor.depth,
           target.depth,
           this.environment,
-          echoFluctuation
-            ? {
-                ...this.acoustic!,
-                targetStrengthDb:
-                  targetStrengthDb +
-                  echoFluctuation.amplitudeDb *
-                    Math.sin((2 * Math.PI * timestamp) / echoFluctuation.period),
-              }
-            : { ...this.acoustic!, targetStrengthDb },
+          {
+            ...this.acoustic!,
+            ambientNoiseDb: ambientDb,
+            targetStrengthDb:
+              targetStrengthDb +
+              (echoFluctuation
+                ? echoFluctuation.amplitudeDb *
+                  Math.sin((2 * Math.PI * timestamp) / echoFluctuation.period)
+                : 0),
+          },
         )
       : null;
     if (range < this.config.minRange || range > this.config.maxRange) {

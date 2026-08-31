@@ -46,11 +46,16 @@ export function createAmbiguityScenarioConfig(
   config.guidance.mode = "ekf";
   config.interceptRadius = 14;
   config.torpedo.commandedSpeed = 30;
+  // Speed-dependent self-noise: sprinting degrades the weapon's own
+  // receiver. Synthetic values.
+  config.sensor.selfNoise = { baseDb: 52, dbPerMs: 0.55 };
   config.doctrine = defaultDoctrine();
   config.weapon = {
     phases: { enableTime: 4, terminalRange: 500, reacquireAfter: 3 },
     speed: { cruiseSpeed: 30, sprintSpeed: 40 },
-    endurance: { runTime: 110 },
+    endurance: {
+      battery: { capacityWs: 3.2e6, hotelW: 200, dragKW: 0.8 },
+    },
     terminalSensor: { cadenceHz: 20, innovationGate: 9, fovHalfAngle: (80 * Math.PI) / 180 },
     fuze: { detectionRadius: 25 },
     effectiveness: { lethalRadius: 14, shape: 2 },
@@ -61,7 +66,7 @@ export function createAmbiguityScenarioConfig(
     id: "hostile",
     kind: "hostile-sub",
     vehicle: vehicle(2000, 650, heading, speed, 30),
-    targetStrengthDb: 15,
+    aspectEcho: { bowDb: 8, beamDb: 19 },
     behavior: { kind: "scripted-evasive", triggerRange: 700, rate: -0.05 },
   });
 
@@ -82,7 +87,7 @@ export function createAmbiguityScenarioConfig(
           id: "friendly",
           kind: "friendly-sub",
           vehicle: vehicle(1600, -700, Math.PI, 5, 25),
-          targetStrengthDb: 12,
+          aspectEcho: { bowDb: 7, beamDb: 17 },
           behavior: { kind: "constant-velocity" },
           friendlySignature: 0.9,
         },
@@ -158,7 +163,7 @@ export function createAmbiguityScenarioConfig(
           id: "friendly",
           kind: "friendly-sub",
           vehicle: vehicle(1600, -700, Math.PI, 5, 25),
-          targetStrengthDb: 12,
+          aspectEcho: { bowDb: 7, beamDb: 17 },
           behavior: { kind: "constant-velocity" },
           friendlySignature: 0.9,
         },

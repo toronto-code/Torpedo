@@ -79,6 +79,25 @@ export function createContactRuntime(
   };
 }
 
+/** Effective target strength for a contact at its current aspect to the
+ *  weapon: aspect-dependent when configured, otherwise the flat value. */
+export function effectiveTargetStrength(
+  runtime: ContactRuntime,
+  weaponPosition: { x: number; y: number },
+  fallbackDb: number,
+): number {
+  const aspectEcho = runtime.spec.aspectEcho;
+  if (!aspectEcho) {
+    return runtime.spec.targetStrengthDb ?? fallbackDb;
+  }
+  const dx = weaponPosition.x - runtime.state.position.x;
+  const dy = weaponPosition.y - runtime.state.position.y;
+  const bearingToWeapon = Math.atan2(dy, dx);
+  let aspect = bearingToWeapon - runtime.state.heading;
+  aspect = Math.atan2(Math.sin(aspect), Math.cos(aspect));
+  return aspectEcho.bowDb + (aspectEcho.beamDb - aspectEcho.bowDb) * Math.sin(aspect) ** 2;
+}
+
 export function contactControl(
   runtime: ContactRuntime,
   rangeToWeapon: number,
