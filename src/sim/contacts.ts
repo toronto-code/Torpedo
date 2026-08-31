@@ -4,6 +4,7 @@ import {
   type VehicleDynamics,
 } from "./dynamics-model";
 import { wrapAngle } from "./math";
+import { initialTargetPerceptionState, type TargetPerceptionState } from "./target-perception";
 import type {
   ContactBehavior,
   ContactSpec,
@@ -17,6 +18,8 @@ export interface ContactRuntime {
   state: VehicleState;
   active: boolean;
   dynamics: VehicleDynamics;
+  /** Truth-side threat perception state; present when spec.perception is. */
+  perceptionState?: TargetPerceptionState;
 }
 
 /**
@@ -76,6 +79,9 @@ export function createContactRuntime(
     state: dynamics.initialize(spec.vehicle),
     active: spec.behavior?.kind !== "decoy",
     dynamics,
+    ...(spec.perception
+      ? { perceptionState: initialTargetPerceptionState() }
+      : {}),
   };
 }
 

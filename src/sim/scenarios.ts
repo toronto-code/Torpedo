@@ -49,6 +49,17 @@ export function createAmbiguityScenarioConfig(
   // Speed-dependent self-noise: sprinting degrades the weapon's own
   // receiver. Synthetic values.
   config.sensor.selfNoise = { baseDb: 52, dbPerMs: 0.55 };
+  // Depth-dependent sound speed with a mid-range shadow band when the
+  // weapon and contact straddle the layer. Synthetic values.
+  config.environment = config.environment ?? createDefaultConfig().environment!;
+  config.environment.soundProfile = {
+    layerDepth: 60,
+    thermoclineDrop: 20,
+    deepGradient: 0.017,
+    layerLossDb: 12,
+    recoveryRange: 3500,
+    fadeWidth: 1500,
+  };
   config.doctrine = defaultDoctrine();
   config.weapon = {
     phases: { enableTime: 4, terminalRange: 500, reacquireAfter: 3 },
@@ -62,13 +73,34 @@ export function createAmbiguityScenarioConfig(
   };
   const vehicle = contactVehicle.bind(null, config.target);
 
-  const hostile = (heading: number, speed = 6): ContactSpec => ({
+  const hostile = (heading: number, speed = 6): ContactSpec => {
+    // The hostile needs real depth authority to dive below the layer.
+    const hostileVehicle = vehicle(2000, 650, heading, speed, 30);
+    hostileVehicle.parameters = {
+      ...hostileVehicle.parameters,
+      maxDepthRate: 1.5,
+      maxDepthAcceleration: 0.5,
+      depthResponseTime: 3,
+    };
+    return {
     id: "hostile",
     kind: "hostile-sub",
-    vehicle: vehicle(2000, 650, heading, speed, 30),
+    vehicle: hostileVehicle,
     aspectEcho: { bowDb: 8, beamDb: 19 },
     behavior: { kind: "scripted-evasive", triggerRange: 700, rate: -0.05 },
-  });
+    // Truth-side threat perception: hears the weapon's pings, then evades
+    // and dives below the layer — shielding itself acoustically both ways.
+    perception: {
+      detectionThresholdDb: 45,
+      detectionTransitionDb: 3,
+      reactionDelay: 4,
+      reactionGrace: 6,
+      evasiveRate: 0.05,
+      diveDepth: 130,
+      bearingSigmaRad: 0.1,
+    },
+    };
+  };
 
   switch (preset) {
     case "crossing-subs": {

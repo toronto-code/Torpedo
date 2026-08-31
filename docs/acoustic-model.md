@@ -63,3 +63,17 @@ These are analytic and software validation checks—not field calibration. A rea
 environment would require measured sound-speed profiles, bathymetry, bottom type,
 ambient-noise spectra, platform self-noise, transducer characterization, and
 comparison against time-synchronized observations.
+
+
+## Sound-speed profile and refraction (synthetic)
+
+When `environment.soundProfile` is configured, the sound speed becomes a
+piecewise function of depth — near-constant in a mixed surface layer,
+falling across a thermocline, then rising with a deep isothermal gradient —
+and propagation uses the source/receiver path-average speed. Paths that
+straddle the layer take an extra one-way loss (full within `recoveryRange`,
+fading to zero across `fadeWidth`), producing a mid-range shadow band.
+Without a profile the homogeneous-water channel is unchanged. All constants
+are synthetic. Truth-side contacts can also hear the weapon's pings through
+the same channel (`ContactSpec.perception`), so diving below the layer
+shields a contact acoustically in both directions.

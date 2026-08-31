@@ -271,6 +271,15 @@ export function validateConfig(config: SimulationConfig): void {
   nonnegative("sensor.rangeSigmaPerMeter", config.sensor.rangeSigmaPerMeter);
   nonnegative("sensor.latency", config.sensor.latency);
   if (config.environment) {
+    const profile = config.environment.soundProfile;
+    if (profile) {
+      nonnegative("environment.soundProfile.layerDepth", profile.layerDepth);
+      finite("environment.soundProfile.thermoclineDrop", profile.thermoclineDrop);
+      finite("environment.soundProfile.deepGradient", profile.deepGradient);
+      nonnegative("environment.soundProfile.layerLossDb", profile.layerLossDb);
+      nonnegative("environment.soundProfile.recoveryRange", profile.recoveryRange);
+      nonnegative("environment.soundProfile.fadeWidth", profile.fadeWidth);
+    }
     finite("environment.temperatureC", config.environment.temperatureC);
     nonnegative("environment.salinityPsu", config.environment.salinityPsu);
     positive("environment.waterDepth", config.environment.waterDepth);
@@ -419,6 +428,21 @@ export function validateConfig(config: SimulationConfig): void {
       nonnegative("sensor.selfNoise.dbPerMs", config.sensor.selfNoise.dbPerMs);
     }
     for (const contact of config.contacts ?? []) {
+      const perception = contact.perception;
+      if (perception) {
+        finite("contacts.perception.detectionThresholdDb", perception.detectionThresholdDb);
+        positive("contacts.perception.detectionTransitionDb", perception.detectionTransitionDb);
+        nonnegative("contacts.perception.reactionDelay", perception.reactionDelay);
+        nonnegative("contacts.perception.reactionGrace", perception.reactionGrace);
+        nonnegative("contacts.perception.evasiveRate", perception.evasiveRate);
+        nonnegative("contacts.perception.bearingSigmaRad", perception.bearingSigmaRad);
+        if (perception.diveDepth !== undefined) {
+          nonnegative("contacts.perception.diveDepth", perception.diveDepth);
+        }
+        if (perception.quietFactor !== undefined) {
+          positive("contacts.perception.quietFactor", perception.quietFactor);
+        }
+      }
       if (contact.aspectEcho) {
         finite(`contacts.${contact.id}.aspectEcho.bowDb`, contact.aspectEcho.bowDb);
         finite(`contacts.${contact.id}.aspectEcho.beamDb`, contact.aspectEcho.beamDb);

@@ -37,6 +37,7 @@ import {
   type ContactRuntime,
 } from "./contacts";
 import { SeekerModel, type SeekerContact } from "./sensor";
+import { updateTargetPerception } from "./target-perception";
 import { MultiTargetTracker, type TrackFeatures } from "./tracker";
 import { ContactClassifier, type TrackClassification } from "./classify";
 import {
@@ -132,8 +133,11 @@ export class SimulationEngine {
     noise: SeededRandom;
     dropout: SeededRandom;
     channel: SeededRandom;
+    perception: SeededRandom | null;
   }[] = [];
   private tracker: MultiTargetTracker | null = null;
+  private perceptionIndices: number[] = [];
+  private lastPingAt: number | null = null;
   private readonly classifier = new ContactClassifier();
   private tewa: TewaState = initialTewaState();
   private lastCandidates: TewaCandidate[] = [];
@@ -191,7 +195,13 @@ export class SimulationEngine {
         noise: new SeededRandom(deriveSeed(config.seed, `contact-noise-${spec.id}`)),
         dropout: new SeededRandom(deriveSeed(config.seed, `contact-dropout-${spec.id}`)),
         channel: new SeededRandom(deriveSeed(config.seed, `contact-channel-${spec.id}`)),
+        perception: spec.perception
+          ? new SeededRandom(deriveSeed(config.seed, `contact-perception-${spec.id}`))
+          : null,
       }));
+      this.perceptionIndices = config.contacts
+        .map((spec, index) => (spec.perception ? index : -1))
+        .filter((index) => index >= 0);
       const primary =
         this.designatedContactRuntime() ?? this.primaryContactRuntime();
       if (primary) this.target = primary.state;
@@ -671,6 +681,7 @@ export class SimulationEngine {
         },
       );
       if (samples) {
+        this.lastPingAt = this.timestamp;
         const locked = samples.find((sample) => sample.status === "locked");
         this.seekerStatus = locked
           ? "locked"
@@ -904,6 +915,23 @@ export class SimulationEngine {
 
     const rangeBefore = horizontalRange(this.torpedo, this.target);
     const previousTorpedoPosition = this.torpedo.position;
+    if (this.contactRuntimes && this.lastPingAt !== null) {
+      this.lastPingAt = null;
+      for (const index of this.perceptionIndices) {
+        const runtime = this.contactRuntimes[index];
+        if (!runtime.active || !runtime.spec.perception) continue;
+        runtime.perceptionState = updateTargetPerception({
+          state: runtime.perceptionState!,
+          now: this.timestamp,
+          weapon: this.torpedo,
+          contact: runtime.state,
+          perception: runtime.spec.perception,
+          environment: this.config.environment,
+          acoustic: this.config.acoustic,
+          random: this.contactStreams[index].perception!,
+        });
+      }
+    }
     if (this.contactRuntimes) {
       for (const runtime of this.contactRuntimes) {
         if (!runtime.active) {
@@ -926,7 +954,42 @@ export class SimulationEngine {
           }
           if (!runtime.active) continue;
         }
-        const control = contactControl(runtime, rangeBefore, this.timestamp);
+        let control = contactControl(runtime, rangeBefore, this.timestamp);
+        const perception = runtime.spec.perception;
+        if (perception && runtime.perceptionState?.reacting) {
+          // Evasion from the perceived threat: turn away from the heard
+          // bearing, dive toward the configured depth, optionally go quiet.
+          const away = wrapAngle(
+            (runtime.perceptionState.heardBearing ?? runtime.state.heading) +
+              Math.PI,
+          );
+          const error = wrapAngle(away - runtime.state.heading);
+          control = {
+            ...control,
+            yawRateCommand: clamp(
+              error,
+              -perception.evasiveRate,
+              perception.evasiveRate,
+            ),
+            ...(perception.diveDepth !== undefined
+              ? {
+                  depthRateCommand: depthRateAutopilot(
+                    perception.diveDepth,
+                    runtime.state,
+                    runtime.spec.vehicle.parameters,
+                  ),
+                }
+              : {}),
+            ...(perception.quietFactor !== undefined
+              ? {
+                  speedCommand: Math.max(
+                    0.5,
+                    runtime.spec.vehicle.commandedSpeed * perception.quietFactor,
+                  ),
+                }
+              : {}),
+          };
+        }
         runtime.state = runtime.dynamics.integrate(
           runtime.state,
           control,

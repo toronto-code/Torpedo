@@ -2,7 +2,56 @@ import type {
   AcousticChannelState,
   AcousticConfig,
   EnvironmentConfig,
+  SoundProfileConfig,
 } from "./types";
+
+/** Piecewise synthetic sound-speed profile: constant in the mixed layer,
+ *  falling across the thermocline, then rising with the deep gradient. */
+export function soundSpeedAtDepth(
+  profile: SoundProfileConfig,
+  environment: EnvironmentConfig,
+  depthM: number,
+): number {
+  const surfaceSpeed = soundSpeedMackenzie(
+    environment.temperatureC,
+    environment.salinityPsu,
+    0,
+  );
+  const depth = Math.max(0, depthM);
+  const thermoclineThickness = Math.max(
+    1,
+    Math.min(150, profile.layerDepth * 0.75),
+  );
+  if (depth <= profile.layerDepth) return surfaceSpeed;
+  if (depth <= profile.layerDepth + thermoclineThickness) {
+    const fraction = (depth - profile.layerDepth) / thermoclineThickness;
+    return surfaceSpeed - profile.thermoclineDrop * fraction;
+  }
+  return (
+    surfaceSpeed -
+    profile.thermoclineDrop +
+    profile.deepGradient * (depth - profile.layerDepth - thermoclineThickness)
+  );
+}
+
+/** Layer-straddling refraction loss: full within recoveryRange, fading to
+ *  zero across fadeWidth beyond it (convergence-zone flavor). Synthetic. */
+export function refractionLossDb(
+  profile: SoundProfileConfig,
+  sourceDepthM: number,
+  receiverDepthM: number,
+  rangeM: number,
+): number {
+  const straddles =
+    (sourceDepthM - profile.layerDepth) * (receiverDepthM - profile.layerDepth) < 0;
+  if (!straddles || rangeM >= profile.recoveryRange + profile.fadeWidth) return 0;
+  const bounded = Math.max(1, rangeM);
+  const factor =
+    bounded <= profile.recoveryRange
+      ? 1
+      : 1 - (bounded - profile.recoveryRange) / profile.fadeWidth;
+  return profile.layerLossDb * factor;
+}
 
 /** Mackenzie (1981) sound-speed approximation for ordinary ocean conditions. */
 export function soundSpeedMackenzie(
@@ -46,15 +95,24 @@ export function acousticChannel(
     environment.waterDepth,
     Math.max(0, (sourceDepthM + receiverDepthM) / 2),
   );
-  const soundSpeed = soundSpeedMackenzie(
-    environment.temperatureC,
-    environment.salinityPsu,
-    meanDepth,
-  );
+  const profile = environment.soundProfile;
+  const soundSpeed = profile
+    ? 0.5 *
+      (soundSpeedAtDepth(profile, environment, sourceDepthM) +
+        soundSpeedAtDepth(profile, environment, receiverDepthM))
+    : soundSpeedMackenzie(
+        environment.temperatureC,
+        environment.salinityPsu,
+        meanDepth,
+      );
+  const refraction = profile
+    ? refractionLossDb(profile, sourceDepthM, receiverDepthM, range)
+    : 0;
   const absorptionDbPerKm = thorpAbsorptionDbPerKm(acoustic.frequencyKhz);
   const oneWayTransmissionLossDb =
     environment.spreadingCoefficient * Math.log10(range)
-    + absorptionDbPerKm * range / 1000;
+    + absorptionDbPerKm * range / 1000
+    + refraction;
   const receivedEchoLevelDb =
     acoustic.sourceLevelDb
     - 2 * oneWayTransmissionLossDb
@@ -74,5 +132,6 @@ export function acousticChannel(
     signalToNoiseDb,
     detectionProbability,
     propagationDelay: 2 * range / soundSpeed,
+    ...(profile ? { refractionLossDb: refraction } : {}),
   };
 }

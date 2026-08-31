@@ -65,6 +65,8 @@ export interface ContactSpec {
   /** Synthetic friendly-marking correlation the seeker receiver reports
    *  (0..1): a fictional IFF analog carried as a measurement feature. */
   friendlySignature?: number;
+  /** Truth-side threat perception (hearing the weapon's pings). */
+  perception?: TargetPerceptionConfig;
 }
 
 /** Truth contact state in telemetry/snapshots; consumed by rendering and
@@ -255,6 +257,51 @@ export interface EnvironmentConfig {
   salinityPsu: number;
   waterDepth: number;
   spreadingCoefficient: number;
+  /** Optional depth-dependent sound-speed profile with simplified
+   *  refraction shadowing. Absent keeps the homogeneous-water channel. */
+  soundProfile?: SoundProfileConfig;
+}
+
+/** Synthetic piecewise profile: a mixed surface layer of near-constant
+ *  speed, a thermocline drop, and a deep isothermal rise. When the source
+ *  and receiver straddle the layer the direct path bends away and takes an
+ *  extra transmission loss, creating a mid-range shadow band that fades
+ *  with range. All values synthetic. */
+export interface SoundProfileConfig {
+  /** Base of the mixed layer (m, positive down). */
+  layerDepth: number;
+  /** Sound-speed decrease from the layer base to the thermocline minimum (m/s). */
+  thermoclineDrop: number;
+  /** Deep isothermal gradient (m/s per m, positive down). */
+  deepGradient: number;
+  /** Extra one-way loss when the path straddles the layer (dB). */
+  layerLossDb: number;
+  /** Range inside which the full layer loss applies (m). */
+  recoveryRange: number;
+  /** Range over which the layer loss fades out beyond recoveryRange (m). */
+  fadeWidth: number;
+}
+
+/** Truth-side threat perception for a contact: hears the weapon's active
+ *  pings and, after a sustained detection, evades — turning away, diving
+ *  below the layer, and optionally slowing. Synthetic. */
+export interface TargetPerceptionConfig {
+  /** Detection threshold on heard SNR (dB). */
+  detectionThresholdDb: number;
+  /** Logistic transition width (dB). */
+  detectionTransitionDb: number;
+  /** Sustained detection required before reacting (s). */
+  reactionDelay: number;
+  /** Detection grace before the reaction is dropped (s). */
+  reactionGrace: number;
+  /** Maximum evasive turn rate (rad/s, magnitude). */
+  evasiveRate: number;
+  /** Commanded depth once reacting — typically below the layer (m). */
+  diveDepth?: number;
+  /** Speed multiplier once reacting (going quiet). */
+  quietFactor?: number;
+  /** Bearing-estimate noise of the heard threat (rad). */
+  bearingSigmaRad: number;
 }
 
 export interface AcousticConfig {
@@ -277,6 +324,9 @@ export interface AcousticChannelState {
   signalToNoiseDb: number;
   detectionProbability: number;
   propagationDelay: number;
+  /** Extra one-way loss from refraction across the layer (dB), when a
+   *  sound profile is configured. */
+  refractionLossDb?: number;
 }
 
 export interface EstimatorConfig {
