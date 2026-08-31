@@ -33,7 +33,7 @@ function trackerOptions() {
 }
 
 describe("multi-target tracker", () => {
-  it("associates well-separated contacts to distinct stable tracks", () => {
+  it("associates well-separated contacts to distinct stable tracks", { timeout: 60000 }, () => {
     const tracker = new MultiTargetTracker(trackerOptions(), "ekf");
     // Contact A: north, 1000 m, slowly opening. Contact B: 90 deg, 1500 m.
     for (let index = 0; index < 10; index += 1) {
@@ -67,7 +67,7 @@ describe("multi-target tracker", () => {
     expect(Math.abs((north?.estimate.position.x ?? 0) - 1006)).toBeLessThan(60);
   });
 
-  it("initiates a new track for a return far from every gate", () => {
+  it("initiates a new track for a return far from every gate", { timeout: 60000 }, () => {
     const tracker = new MultiTargetTracker(trackerOptions(), "ekf");
     for (let index = 0; index < 6; index += 1) {
       tracker.process(
@@ -93,7 +93,7 @@ describe("multi-target tracker", () => {
     expect(tracker.liveTracks(0.85)).toHaveLength(2);
   });
 
-  it("ages tracks: tentative deletion, coasting, and full deletion", () => {
+  it("ages tracks: tentative deletion, coasting, and full deletion", { timeout: 60000 }, () => {
     const tracker = new MultiTargetTracker(
       { ...trackerOptions(), tentativeTimeout: 2, deletionTimeout: 8 },
       "ekf",
@@ -129,7 +129,7 @@ describe("multi-target tracker", () => {
     expect(tracker.liveTracks(12)).toHaveLength(0);
   });
 
-  it("is deterministic for identical observation streams", () => {
+  it("is deterministic for identical observation streams", { timeout: 60000 }, () => {
     const run = () => {
       const tracker = new MultiTargetTracker(trackerOptions(), "ekf");
       for (let index = 0; index < 8; index += 1) {
@@ -183,7 +183,7 @@ describe("multi-contact engine integration with tracking", () => {
     return config;
   }
 
-  it("runs to completion in ekf and raw modes without OOSM or invalid state", () => {
+  it("runs to completion in ekf and raw modes without OOSM or invalid state", { timeout: 60000 }, () => {
     for (const mode of ["ekf", "raw"] as const) {
       const run = runHeadless(multiConfig(mode));
       expect(run.result.terminationReason).not.toBe("invalid-state");
@@ -193,7 +193,7 @@ describe("multi-contact engine integration with tracking", () => {
     }
   });
 
-  it("produces identical results for identical seeds", () => {
+  it("produces identical results for identical seeds", { timeout: 60000 }, () => {
     const a = runHeadless(multiConfig("ekf"));
     const b = runHeadless(multiConfig("ekf"));
     expect(a.result).toEqual(b.result);

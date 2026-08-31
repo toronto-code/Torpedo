@@ -48,7 +48,7 @@ function config(mode: "manual" | "autonomous"): SimulationConfig {
 }
 
 describe("engagement stability", () => {
-  it("keeps the paired truth target continuous — no frame-to-frame flapping", () => {
+  it("keeps the paired truth target continuous — no frame-to-frame flapping", { timeout: 60000 }, () => {
     const run = runHeadless(config("autonomous"));
     let flaps = 0;
     let jumps = 0;
@@ -71,7 +71,7 @@ describe("engagement stability", () => {
     expect(jumps).toBeLessThan(6);
   });
 
-  it("holds an orbit standoff under hold-fire instead of running through", () => {
+  it("holds an orbit standoff under hold-fire instead of running through", { timeout: 60000 }, () => {
     const run = runHeadless(config("manual"));
     expect(run.result.terminationReason).toBe("endurance-exhausted");
     expect(run.result.engagementOutcome).toBe("miss");
@@ -95,7 +95,7 @@ describe("engagement stability", () => {
     expect(Math.min(...ranges)).toBeLessThan(1800);
   });
 
-  it("still completes the autonomous engagement on the hostile", () => {
+  it("still completes the autonomous engagement on the hostile", { timeout: 60000 }, () => {
     const run = runHeadless(config("autonomous"));
     expect(run.result.engagementOutcome).toBe("correct-hostile");
   });

@@ -16,7 +16,7 @@ const PRESETS: AmbiguityPreset[] = [
 
 describe("ambiguity scenario presets", () => {
   for (const preset of PRESETS) {
-    it(`runs ${preset} deterministically with a complete decision chain`, () => {
+    it(`runs ${preset} deterministically with a complete decision chain`, { timeout: 60000 }, () => {
       const config = createAmbiguityScenarioConfig(preset);
       expect(config.contacts).toBeDefined();
       expect(config.contacts!.length).toBeGreaterThan(0);

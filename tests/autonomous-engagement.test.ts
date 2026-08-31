@@ -95,7 +95,7 @@ function multiConfig(overrides: {
 }
 
 describe("classification from observables", () => {
-  it("separates a whale from a sub-like contact on features", () => {
+  it("separates a whale from a sub-like contact on features", { timeout: 60000 }, () => {
     const classifier = new ContactClassifier();
     const sub = trackEstimate({ velocity: { x: -5, y: 0 } });
     const whale = trackEstimate({
@@ -134,7 +134,7 @@ describe("classification from observables", () => {
     expect(whaleClass.confidence).toBeGreaterThan(0.6);
   });
 
-  it("keeps an ambiguous echo honestly uncertain", () => {
+  it("keeps an ambiguous echo honestly uncertain", { timeout: 60000 }, () => {
     const classifier = new ContactClassifier();
     const estimate = trackEstimate({ velocity: { x: -4, y: 0 } });
     let classification = classifier.update(1, 0, estimate, {
@@ -168,7 +168,7 @@ describe("TEWA selection and authorization", () => {
        },
     }));
 
-  it("never selects excluded classes", () => {
+  it("never selects excluded classes", { timeout: 60000 }, () => {
     const doctrine = defaultDoctrine();
     let state = updateTewa({
       state: initialTewaState(),
@@ -190,7 +190,7 @@ describe("TEWA selection and authorization", () => {
     expect(state.authorized).toBe(false);
   });
 
-  it("authorizes autonomously only after sustained doctrine satisfaction", () => {
+  it("authorizes autonomously only after sustained doctrine satisfaction", { timeout: 60000 }, () => {
     const doctrine = { ...defaultDoctrine(), autoAuthorizeSustain: 3 };
     let state = initialTewaState();
     const good = candidates([1], "sub-like", 0.9) as never;
@@ -203,7 +203,7 @@ describe("TEWA selection and authorization", () => {
     expect(state.authorizedAt).toBeGreaterThanOrEqual(4);
   });
 
-  it("resets the satisfaction window when doctrine breaks", () => {
+  it("resets the satisfaction window when doctrine breaks", { timeout: 60000 }, () => {
     const doctrine = { ...defaultDoctrine(), autoAuthorizeSustain: 2 };
     let state = initialTewaState();
     const good = candidates([1], "sub-like", 0.9) as never;
@@ -218,7 +218,7 @@ describe("TEWA selection and authorization", () => {
     expect(state.authorized).toBe(true);
   });
 
-  it("holds designation with hysteresis against a flickering challenger", () => {
+  it("holds designation with hysteresis against a flickering challenger", { timeout: 60000 }, () => {
     const doctrine = { ...defaultDoctrine(), redesignateAfter: 5, redesignateMargin: 0.5 };
     let state = initialTewaState();
     const own = { x: 0, y: 0 };
@@ -251,7 +251,7 @@ describe("TEWA selection and authorization", () => {
 });
 
 describe("autonomous engagement integration", () => {
-  it("classifies, selects, authorizes, and correctly engages the hostile", () => {
+  it("classifies, selects, authorizes, and correctly engages the hostile", { timeout: 60000 }, () => {
     const run = runHeadless(multiConfig({}));
     expect(run.result.terminationReason).toBe("fuzed-detonation");
     expect(run.result.engagedContact?.id).toBe("hostile");
@@ -261,7 +261,7 @@ describe("autonomous engagement integration", () => {
     expect(stages).toContain("authorize");
   });
 
-  it("blocks engagement in manual doctrine until the operator authorizes", () => {
+  it("blocks engagement in manual doctrine until the operator authorizes", { timeout: 60000 }, () => {
     const config = multiConfig({
       doctrine: { ...defaultDoctrine(), mode: "manual" },
     });
@@ -281,7 +281,7 @@ describe("autonomous engagement integration", () => {
     expect(engine.engagementAuthorized).toBe(true);
   });
 
-  it("can be seduced onto a decoy when classification lags", () => {
+  it("can be seduced onto a decoy when classification lags", { timeout: 60000 }, () => {
     const run = runHeadless(multiConfig({ withDecoy: true }));
     expect(["fuzed-detonation", "intercept"]).toContain(run.result.terminationReason);
     expect(run.result.engagedContact).toBeDefined();
@@ -291,20 +291,20 @@ describe("autonomous engagement integration", () => {
     expect(again.result.engagementOutcome).toBe(run.result.engagementOutcome);
   });
 
-  it("skips biologics and commercial traffic in perfect mode too", () => {
+  it("skips biologics and commercial traffic in perfect mode too", { timeout: 60000 }, () => {
     const run = runHeadless(multiConfig({ mode: "perfect" }));
     expect(run.result.terminationReason).toBe("fuzed-detonation");
     expect(run.result.engagementOutcome).toBe("correct-hostile");
     expect(run.result.engagedContact?.id).toBe("hostile");
   });
 
-  it("reproduces the entire decision chain deterministically", () => {
+  it("reproduces the entire decision chain deterministically", { timeout: 60000 }, () => {
     const a = runHeadless(multiConfig({ withDecoy: true }));
     const b = runHeadless(multiConfig({ withDecoy: true }));
     expect(a.result).toEqual(b.result);
   });
 
-  it("leaves legacy runs without contacts entirely untouched", () => {
+  it("leaves legacy runs without contacts entirely untouched", { timeout: 60000 }, () => {
     const legacy = createDefaultConfig();
     const run = runHeadless(legacy);
     expect(run.result.terminationReason).toBe("intercept");

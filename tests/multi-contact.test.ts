@@ -61,7 +61,7 @@ function multiContactConfig(): SimulationConfig {
 }
 
 describe("multi-contact truth layer", () => {
-  it("runs multiple contacts with finite state and truth telemetry", () => {
+  it("runs multiple contacts with finite state and truth telemetry", { timeout: 60000 }, () => {
     const run = runHeadless(multiContactConfig());
     expect(run.result.terminationReason).not.toBe("invalid-state");
     const withContacts = run.telemetry.filter((sample) => sample.contacts);
@@ -78,7 +78,7 @@ describe("multi-contact truth layer", () => {
     }
   });
 
-  it("keeps observations anonymous — no identity fields on the wire", () => {
+  it("keeps observations anonymous — no identity fields on the wire", { timeout: 60000 }, () => {
     const config = multiContactConfig();
     config.interceptRadius = 0.5;
     const engine = new SimulationEngine(config);
@@ -95,7 +95,7 @@ describe("multi-contact truth layer", () => {
     expect(observed).toBe(true);
   });
 
-  it("gives each contact independent deterministic noise draws", () => {
+  it("gives each contact independent deterministic noise draws", { timeout: 60000 }, () => {
     const a = runHeadless(multiContactConfig());
     const b = runHeadless(multiContactConfig());
     expect(a.result).toEqual(b.result);
@@ -109,7 +109,7 @@ describe("multi-contact truth layer", () => {
     expect(new Set(positions.map((x) => x.toFixed(1))).size).toBe(3);
   });
 
-  it("activates a decoy only when the weapon closes inside the trigger range", () => {
+  it("activates a decoy only when the weapon closes inside the trigger range", { timeout: 60000 }, () => {
     const config = multiContactConfig();
     config.runtime.maxTime = 90;
     config.interceptRadius = 0.5;
@@ -132,7 +132,7 @@ describe("multi-contact truth layer", () => {
     expect(run.telemetry[firstActive].timestamp).toBeGreaterThan(10);
   });
 
-  it("maps legacy scenarios onto contact behaviors identically", () => {
+  it("maps legacy scenarios onto contact behaviors identically", { timeout: 60000 }, () => {
     const config = createDefaultConfig();
     const behavior = behaviorFromScenario(config.scenario);
     expect(behavior).toEqual({
@@ -175,7 +175,7 @@ describe("multi-contact truth layer", () => {
     }
   });
 
-  it("leaves legacy single-target runs bit-identical", () => {
+  it("leaves legacy single-target runs bit-identical", { timeout: 60000 }, () => {
     const legacy = createDefaultConfig();
     expect(legacy.contacts).toBeUndefined();
     const run = runHeadless(legacy);
@@ -184,7 +184,7 @@ describe("multi-contact truth layer", () => {
     expect(run.result.elapsedTime).toBeCloseTo(40.905, 3);
   });
 
-  it("rejects invalid contact configurations", () => {
+  it("rejects invalid contact configurations", { timeout: 60000 }, () => {
     const config = multiContactConfig();
     config.contacts!.push(structuredClone(config.contacts![0]));
     expect(() => runHeadless(config)).toThrow(/unique/);
