@@ -123,6 +123,8 @@ export interface WeaponTerminalSensorConfig {
   cadenceHz?: number;
   /** Stricter association gate applied to estimate NIS in terminal. */
   innovationGate?: number;
+  /** Wider seeker half-angle during the terminal phase (rad). */
+  fovHalfAngle?: number;
 }
 
 export interface FuzeConfig {

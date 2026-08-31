@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createDefaultConfig } from "../src/sim/config";
 import { runHeadless } from "../src/sim/engine";
+import { defaultDoctrine } from "../src/sim/tewa";
 import { MultiTargetTracker } from "../src/sim/tracker";
 import type { SensorObservation } from "../src/sim/types";
 import { wrapAngle } from "../src/sim/math";
@@ -147,7 +148,9 @@ describe("multi-target tracker", () => {
 describe("multi-contact engine integration with tracking", () => {
   function multiConfig(mode: "ekf" | "raw") {
     const config = createDefaultConfig();
-    config.runtime.maxTime = 60;
+    config.runtime.maxTime = 90;
+    // Authorization-free doctrine: this suite tests tracking, not TEWA timing.
+    config.doctrine = { ...defaultDoctrine(), requiredConfidence: 0.01, autoAuthorizeSustain: 0 };
     config.guidance.mode = mode;
     config.interceptRadius = 14;
     const vehicle = (x: number, y: number, heading: number, speed: number, depth: number) => {

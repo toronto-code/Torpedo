@@ -30,6 +30,7 @@ export class SeekerModel {
   private nextSampleTime = 0;
   private observationId = 0;
   private cadenceHz: number;
+  private fovHalfAngle: number;
 
   constructor(
     private readonly config: SensorConfig,
@@ -40,6 +41,12 @@ export class SeekerModel {
     private readonly channelRandom?: SeededRandom,
   ) {
     this.cadenceHz = config.cadenceHz;
+    this.fovHalfAngle = config.fovHalfAngle;
+  }
+
+  /** Terminal-phase field-of-view override (rad). */
+  setFov(halfAngle: number): void {
+    this.fovHalfAngle = halfAngle;
   }
 
   /**
@@ -153,7 +160,7 @@ export class SeekerModel {
     const trueBearing = wrapAngle(
       Math.atan2(relative.y, relative.x) - sensor.heading,
     );
-    if (Math.abs(trueBearing) > this.config.fovHalfAngle) {
+    if (Math.abs(trueBearing) > this.fovHalfAngle) {
       return { status: "out-of-fov", observation: null, acoustic: channel };
     }
     if (channel && channelRandom && channelRandom.next() > channel.detectionProbability) {

@@ -414,6 +414,12 @@ export function validateConfig(config: SimulationConfig): void {
         throw new Error("weapon.terminalSensor.cadenceHz must be within (0, 50].");
       }
     }
+    if (weapon.terminalSensor?.fovHalfAngle !== undefined) {
+      positive("weapon.terminalSensor.fovHalfAngle", weapon.terminalSensor.fovHalfAngle);
+      if (weapon.terminalSensor.fovHalfAngle > Math.PI) {
+        throw new Error("weapon.terminalSensor.fovHalfAngle cannot exceed pi radians.");
+      }
+    }
     if (weapon.terminalSensor?.innovationGate !== undefined) {
       positive("weapon.terminalSensor.innovationGate", weapon.terminalSensor.innovationGate);
     }

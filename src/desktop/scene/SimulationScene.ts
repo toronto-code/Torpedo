@@ -181,6 +181,97 @@ function disposeObject(object: THREE.Object3D): void {
   });
 }
 
+const CONTACT_COLORS: Record<string, number> = {
+  "hostile-sub": 0xe7b97c,
+  "friendly-sub": 0x7cd67c,
+  "commercial-surface": 0xc9c9c9,
+  biological: 0x7cb8d4,
+  decoy: 0xff5c5c,
+  ambiguous: 0xd4a7dd,
+};
+
+/**
+ * Stable per-contact truth meshes (rendering/scoring surface only — the
+ * guidance chain never sees them). One mesh per contact id, so a mesh is
+ * never reassigned between different physical contacts.
+ */
+class ContactMeshPool {
+  private readonly meshes = new Map<string, THREE.Group>();
+
+  constructor(private readonly scene: THREE.Scene) {}
+
+  private createContactMesh(kind: string): THREE.Group {
+    const color = CONTACT_COLORS[kind] ?? 0xa0a0a0;
+    const group = new THREE.Group();
+    let geometry: THREE.BufferGeometry;
+    if (kind === "commercial-surface") {
+      geometry = new THREE.BoxGeometry(70, 12, 18);
+    } else if (kind === "biological") {
+      geometry = new THREE.SphereGeometry(7, 12, 8);
+    } else if (kind === "decoy") {
+      geometry = new THREE.SphereGeometry(4, 10, 8);
+    } else {
+      geometry = new THREE.CapsuleGeometry(4, 26, 6, 10);
+      const mesh = new THREE.Mesh(
+        geometry,
+        new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.3 }),
+      );
+      mesh.rotation.z = Math.PI / 2;
+      group.add(mesh);
+      return group;
+    }
+    group.add(
+      new THREE.Mesh(
+        geometry,
+        new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.2 }),
+      ),
+    );
+    return group;
+  }
+
+  update(
+    contacts: readonly {
+      id: string;
+      kind: string;
+      active: boolean;
+      position: { x: number; y: number; z: number };
+      heading: number;
+    }[],
+    visible: boolean,
+    scratch: THREE.Vector3,
+  ): void {
+    const seen = new Set<string>();
+    for (const contact of contacts) {
+      seen.add(contact.id);
+      let mesh = this.meshes.get(contact.id);
+      if (!mesh) {
+        mesh = this.createContactMesh(contact.kind);
+        this.meshes.set(contact.id, mesh);
+        this.scene.add(mesh);
+      }
+      mesh.visible = visible && contact.active;
+      if (mesh.visible) {
+        toRenderPositionInto(contact.position as never, scratch);
+        mesh.position.copy(scratch);
+        if (contact.kind !== "biological" && contact.kind !== "decoy") {
+          mesh.rotation.set(0, -contact.heading, 0);
+        }
+      }
+    }
+    for (const [id, mesh] of this.meshes) {
+      if (!seen.has(id)) mesh.visible = false;
+    }
+  }
+
+  dispose(): void {
+    for (const mesh of this.meshes.values()) {
+      disposeObject(mesh);
+      this.scene.remove(mesh);
+    }
+    this.meshes.clear();
+  }
+}
+
 function createDepthLabel(text: string): THREE.Sprite {
   const canvas = document.createElement("canvas");
   canvas.width = 256;
@@ -312,6 +403,7 @@ export class SimulationScene {
     5,
   );
   private environment: THREE.Group;
+  private readonly contactMeshes: ContactMeshPool;
   private readonly torpedoTrail: Trail;
   private readonly targetTrail: Trail;
   private readonly estimateTrail: Trail;
@@ -339,6 +431,7 @@ export class SimulationScene {
     const sun = new THREE.DirectionalLight(0xd9dddf, 1.35);
     sun.position.set(-800, 1400, 500);
     this.environment = buildEnvironment(options.waterDepth ?? DEFAULT_WATER_DEPTH);
+    this.contactMeshes = new ContactMeshPool(this.scene);
 
     this.torpedoTrail = new Trail({ color: 0x7cf7df, limit: options.trailLimit ?? DEFAULT_TRAIL_LIMIT });
     this.targetTrail = new Trail({ color: 0xe7b97c, opacity: 0.7, limit: options.trailLimit ?? DEFAULT_TRAIL_LIMIT });
@@ -494,6 +587,7 @@ export class SimulationScene {
     cancelAnimationFrame(this.animationFrame);
     this.resizeObserver.disconnect();
     this.orbitControls.dispose();
+    this.contactMeshes.dispose();
     this.torpedoTrail.dispose();
     this.targetTrail.dispose();
     this.estimateTrail.dispose();
@@ -701,9 +795,20 @@ export class SimulationScene {
     const contact = interpolateVehicleInto(this.previous.target, this.current.target, alpha, contactInterpolated);
     this.torpedo.position.copy(own.position);
     this.torpedo.quaternion.copy(own.orientation);
-    this.target.position.copy(contact.position);
-    this.target.quaternion.copy(contact.orientation);
-    this.target.visible = this.options.showTruth;
+    const truthContacts = this.current.contacts;
+    if (truthContacts && truthContacts.length > 0) {
+      this.target.visible = false;
+      this.contactMeshes.update(
+        truthContacts,
+        this.options.showTruth,
+        scratchDesired,
+      );
+    } else {
+      this.target.position.copy(contact.position);
+      this.target.quaternion.copy(contact.orientation);
+      this.target.visible = this.options.showTruth;
+      this.contactMeshes.update([], false, scratchDesired);
+    }
     this.seeker.position.copy(own.position);
     this.seeker.position.y += 0.2;
     this.seeker.rotation.y = -own.heading;

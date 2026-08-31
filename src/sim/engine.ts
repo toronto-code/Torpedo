@@ -26,7 +26,7 @@ import {
   estimationError,
   normalizedEstimationErrorSquared,
 } from "./metrics";
-import { clamp, isFiniteArray, magnitude2, mean, subtract2 } from "./math";
+import { clamp, isFiniteArray, magnitude2, mean, subtract2, wrapAngle } from "./math";
 import { deriveSeed, SeededRandom } from "./random";
 import { horizontalRange, targetYawRateCommand } from "./scenario";
 import {
@@ -135,6 +135,11 @@ export class SimulationEngine {
   private readonly classifier = new ContactClassifier();
   private tewa: TewaState = initialTewaState();
   private lastCandidates: TewaCandidate[] = [];
+  // Cached designated-track -> truth-contact pairing. Recomputed only when
+  // the designation changes so metrics cannot flap between contacts when
+  // two of them pass near the estimate.
+  private pairedDesignatedTrackId: number | null = null;
+  private pairedContactId: string | null = null;
 
   constructor(readonly config: SimulationConfig) {
     validateConfig(config);
@@ -352,6 +357,16 @@ export class SimulationEngine {
     if (!this.contactRuntimes) return null;
     const designation = this.tewa.designation;
     if (designation) {
+      // A live cached pairing wins; recompute only on designation change.
+      if (
+        this.pairedDesignatedTrackId === designation.trackId &&
+        this.pairedContactId !== null
+      ) {
+        const cached = this.contactRuntimes.find(
+          (runtime) => runtime.spec.id === this.pairedContactId,
+        );
+        if (cached?.active) return cached;
+      }
       const candidate = this.lastCandidates.find(
         (entry) => entry.trackId === designation.trackId,
       );
@@ -369,9 +384,15 @@ export class SimulationEngine {
             best = runtime;
           }
         }
-        if (best) return best;
+        if (best) {
+          this.pairedDesignatedTrackId = designation.trackId;
+          this.pairedContactId = best.spec.id;
+          return best;
+        }
       }
     }
+    this.pairedDesignatedTrackId = null;
+    this.pairedContactId = null;
     return this.primaryContactRuntime();
   }
 
@@ -408,12 +429,45 @@ export class SimulationEngine {
         doctrine: this.config.doctrine ?? defaultDoctrine(),
       });
       if (!this.tewa.authorized) {
-        // Hold fire: run straight on the launch heading until authorized.
-        this.guidance = idleGuidance(
-          this.timestamp,
-          this.config.guidance.law,
-          this.torpedo.heading,
+        // Hold fire: maintain a deterministic orbit standoff around the
+        // best tracked candidate so the seeker keeps the contact group in
+        // view while authorization is pending, instead of overshooting or
+        // spinning the field of view away. Pure guidance-side behavior;
+        // the phase machine and seeker are untouched.
+        const STANDOFF_RANGE = 1500;
+        const candidate = this.lastCandidates.find(
+          (entry) => entry.classification.best === "sub-like",
+        ) ?? this.lastCandidates[0];
+        let desiredHeading = this.torpedo.heading;
+        if (candidate) {
+          const dx = candidate.estimate.position.x - this.torpedo.position.x;
+          const dy = candidate.estimate.position.y - this.torpedo.position.y;
+          const bearing = Math.atan2(dy, dx);
+          const range = Math.hypot(dx, dy);
+          // Inside the standoff, fly a gentle inward spiral (heading offset
+          // 45 deg off the bearing) so the seeker — a +/-50 deg half-angle
+          // field — keeps the contact group in view instead of pointing the
+          // nose tangent and staring away from the contacts.
+          desiredHeading =
+            range > STANDOFF_RANGE
+              ? bearing
+              : bearing + Math.PI / 4;
+        }
+        const headingError = wrapAngle(desiredHeading - this.torpedo.heading);
+        const lateralAcceleration = Math.min(
+          this.config.guidance.maxLateralAcceleration,
+          headingError * Math.max(1, this.torpedo.speed) * 0.6,
         );
+        this.guidance = {
+          timestamp: this.timestamp,
+          law: this.config.guidance.law,
+          lateralAcceleration,
+          desiredHeading,
+          losRate: 0,
+          closingVelocity: 0,
+          trackAge: candidate?.estimate.age ?? Number.MAX_SAFE_INTEGER,
+          saturated: false,
+        };
         return;
       }
     }
@@ -493,6 +547,10 @@ export class SimulationEngine {
         const cadenceHz = this.weapon.terminalSensor?.cadenceHz;
         if (cadenceHz !== undefined) {
           this.seeker.setCadence(cadenceHz, this.timestamp);
+        }
+        const terminalFov = this.weapon.terminalSensor?.fovHalfAngle;
+        if (terminalFov !== undefined) {
+          this.seeker.setFov(terminalFov);
         }
       }
     }

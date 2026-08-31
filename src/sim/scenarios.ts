@@ -51,7 +51,7 @@ export function createAmbiguityScenarioConfig(
     phases: { enableTime: 4, terminalRange: 500, reacquireAfter: 3 },
     speed: { cruiseSpeed: 30, sprintSpeed: 40 },
     endurance: { runTime: 110 },
-    terminalSensor: { cadenceHz: 20, innovationGate: 9 },
+    terminalSensor: { cadenceHz: 20, innovationGate: 9, fovHalfAngle: (80 * Math.PI) / 180 },
     fuze: { detectionRadius: 25 },
     effectiveness: { lethalRadius: 14, shape: 2 },
   };

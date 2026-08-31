@@ -6,6 +6,7 @@ import {
   behaviorFromScenario,
   contactYawRateCommand,
 } from "../src/sim/contacts";
+import { defaultDoctrine } from "../src/sim/tewa";
 import type { ContactSpec, SimulationConfig } from "../src/sim/types";
 
 function contactVehicle(overrides: Partial<ContactSpec["vehicle"]["initial"]> = {}) {
@@ -18,6 +19,8 @@ function contactVehicle(overrides: Partial<ContactSpec["vehicle"]["initial"]> = 
 function multiContactConfig(): SimulationConfig {
   const config = createDefaultConfig();
   config.runtime.maxTime = 45;
+  // Authorization-free doctrine: this suite tests the truth layer, not TEWA.
+  config.doctrine = { ...defaultDoctrine(), requiredConfidence: 0.01, autoAuthorizeSustain: 0 };
   config.guidance.mode = "perfect";
   config.interceptRadius = 14;
   config.contacts = [
@@ -39,6 +42,7 @@ function multiContactConfig(): SimulationConfig {
       }),
       targetStrengthDb: 12,
       behavior: { kind: "constant-velocity" },
+      friendlySignature: 0.9,
     },
     {
       id: "whale",
@@ -107,7 +111,7 @@ describe("multi-contact truth layer", () => {
 
   it("activates a decoy only when the weapon closes inside the trigger range", () => {
     const config = multiContactConfig();
-    config.runtime.maxTime = 60;
+    config.runtime.maxTime = 90;
     config.interceptRadius = 0.5;
     config.contacts!.push({
       id: "decoy",
