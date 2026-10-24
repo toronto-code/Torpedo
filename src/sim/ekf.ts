@@ -140,7 +140,26 @@ export class ExtendedKalmanFilter {
       return true;
     }
 
-    const predicted = predict(this.filter, observation.observedAt, this.config);
+    const previous = this.filter;
+    const predicted = predict(previous, observation.observedAt, this.config);
+    if (this.attempt(predicted, observation)) return true;
+    if (this.config.maneuverNoiseScale !== undefined) {
+      // Maneuvering target: retry the same prediction with inflated process
+      // noise so a genuinely turning contact widens the gate instead of
+      // falling into coasting. Deterministic, and only this update widens —
+      // the inflation does not persist into later updates.
+      const inflated = predict(previous, observation.observedAt, {
+        ...this.config,
+        accelerationNoise:
+          this.config.accelerationNoise * this.config.maneuverNoiseScale,
+      });
+      return this.attempt(inflated, observation);
+    }
+    return false;
+  }
+
+  /** Innovation-gated update against an already-predicted filter state. */
+  private attempt(predicted: FilterState, observation: SensorObservation): boolean {
     const h = measurementJacobian(predicted.state, observation.sensorPosition);
     const expected = measurementModel(
       predicted.state,

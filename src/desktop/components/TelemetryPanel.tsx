@@ -2,9 +2,17 @@ import { orientationAngles } from "../../sim/quaternion";
 import type { RenderSnapshot, SimulationConfig, VehicleState } from "../../sim/types";
 import { classifyTrackQuality } from "../trackQuality";
 
+export interface EngagementEvent {
+  at: number;
+  kind: "designate" | "redesignate" | "lost" | "authorize";
+  label: string;
+}
+
 interface Props {
   snapshot: RenderSnapshot | null;
   config: SimulationConfig;
+  events?: EngagementEvent[];
+  eventDuration?: number;
 }
 
 const degrees = (radians: number) => (radians * 180) / Math.PI;
@@ -46,7 +54,7 @@ function VehicleStateTable({ label, vehicle }: { label: string; vehicle: Vehicle
   );
 }
 
-export function TelemetryPanel({ snapshot, config }: Props) {
+export function TelemetryPanel({ snapshot, config, events, eventDuration }: Props) {
   const metrics = snapshot?.metrics;
   const estimate = snapshot?.estimate;
   const guidance = snapshot?.guidance;
@@ -127,6 +135,30 @@ export function TelemetryPanel({ snapshot, config }: Props) {
       {snapshot?.engagement && (
         <div className="vehicle-state">
           <div className="table-subtitle">ENGAGEMENT AUTHORITY · {snapshot.engagement.authorized ? "AUTHORIZED" : "HOLD FIRE"}</div>
+          {events && events.length > 0 && (
+            <div className="pipeline">
+              <div
+                className="pipeline-strip"
+                aria-label="Engagement pipeline timeline"
+              >
+                {events.map((event, index) => (
+                  <i
+                    key={`${event.at}-${index}`}
+                    className={event.kind}
+                    style={{ left: `${Math.min(100, (event.at / Math.max(1, eventDuration ?? (snapshot!.timestamp || 1))) * 100)}%` }}
+                    title={`T+${event.at.toFixed(1)}s · ${event.label}`}
+                  />
+                ))}
+              </div>
+              <div className="pipeline-recent">
+                {events.slice(-3).map((event, index) => (
+                  <span key={`${event.at}-${index}`} className={event.kind}>
+                    T+{event.at.toFixed(0)}s {event.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           <table className="config-table">
             <thead>
               <tr><th>TRK</th><th>QUALITY</th><th>CLASS</th><th>CONF</th><th>RANGE</th></tr>

@@ -30,6 +30,9 @@ export interface TewaCandidate {
   /** Smoothed depression-angle depth (m down) for depth steering; measurement
    *  data, never truth. Null until a depth-bearing observation arrives. */
   depth: number | null;
+  /** Sim time when the track was initiated (s) — drives the doctrine's
+   *  picture-development window. */
+  createdAt: number;
 }
 
 export interface TewaState {
@@ -157,10 +160,14 @@ export function updateTewa(input: TewaUpdateInput): TewaState {
         detail: `track ${best.candidate.trackId} (${best.candidate.classification.best}, confidence ${best.candidate.classification.confidence.toFixed(2)})`,
       });
     } else if (
+      !state.authorized &&
       current &&
       best.candidate.trackId !== state.designation.trackId &&
       input.now - state.designation.since >= input.doctrine.redesignateAfter
     ) {
+      // Redesignation only happens before authorization: once a weapon is
+      // committed, it stays paired with its designated track until that
+      // track is lost. Mid-flight retargeting is an operator action.
       const currentScore = candidateScore(current, input.ownPosition);
       if (best.score > currentScore * (1 + input.doctrine.redesignateMargin)) {
         state.events.push({
@@ -195,7 +202,9 @@ export function updateTewa(input: TewaUpdateInput): TewaState {
         designated.classification.best,
       ) &&
       (input.doctrine.engagementMaxRange === undefined ||
-        range <= input.doctrine.engagementMaxRange);
+        range <= input.doctrine.engagementMaxRange) &&
+      (input.doctrine.minTrackAgeS === undefined ||
+        input.now - designated.createdAt >= input.doctrine.minTrackAgeS);
   }
 
   if (!state.authorized) {

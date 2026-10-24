@@ -52,6 +52,9 @@ export function createAmbiguityScenarioConfig(
   // Depression-angle depth reporting so the weapon can dive with a contact
   // that goes below the layer. Synthetic noise level.
   config.sensor.depthSigmaM = 8;
+  // Maneuver adaptation: an evading contact momentarily inflates the
+  // process noise instead of failing the innovation gate.
+  config.estimator.maneuverNoiseScale = 12;
   // Depth-dependent sound speed with a mid-range shadow band when the
   // weapon and contact straddle the layer. Synthetic values.
   config.environment = config.environment ?? createDefaultConfig().environment!;
@@ -64,6 +67,10 @@ export function createAmbiguityScenarioConfig(
     fadeWidth: 1500,
   };
   config.doctrine = defaultDoctrine();
+  // Picture-development window: no autonomous authorization on a track
+  // younger than 20 s, so classification evidence (dive behavior, echo
+  // stability) matures before the weapon commits.
+  config.doctrine.minTrackAgeS = 20;
   config.weapon = {
     phases: { enableTime: 4, terminalRange: 500, reacquireAfter: 3 },
     speed: { cruiseSpeed: 30, sprintSpeed: 40 },

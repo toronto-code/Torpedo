@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createDefaultConfig } from "../src/sim/config";
 import { runHeadless, SimulationEngine } from "../src/sim/engine";
 import { ContactClassifier } from "../src/sim/classify";
+import type { TrackFeatures } from "../src/sim/tracker";
 import { defaultDoctrine, initialTewaState, updateTewa } from "../src/sim/tewa";
 import type { SimulationConfig, TrackEstimate } from "../src/sim/types";
 
@@ -20,6 +21,18 @@ function trackEstimate(overrides: Partial<TrackEstimate> = {}): TrackEstimate {
     age: 0.1,
     valid: true,
     source: "ekf",
+    ...overrides,
+  };
+}
+
+function trackFeatures(overrides: Partial<TrackFeatures> = {}): TrackFeatures {
+  return {
+    impliedTargetStrengthDb: 14,
+    impliedTsSigmaDb: null,
+    snrDb: 10,
+    signatureCorrelation: 0.1,
+    depthRateMPerS: null,
+    observationCount: 1,
     ...overrides,
   };
 }
@@ -102,31 +115,20 @@ describe("classification from observables", () => {
       position: { x: 500, y: 200 },
       velocity: { x: -1.4, y: 0.5 },
     });
-    let subClass = classifier.update(1, 0, sub, {
-      impliedTargetStrengthDb: 14,
-      snrDb: 10,
-      signatureCorrelation: 0.1,
-      observationCount: 1,
-    });
-    let whaleClass = classifier.update(2, 0, whale, {
+    let subClass = classifier.update(1, 0, sub, trackFeatures());
+    let whaleClass = classifier.update(2, 0, whale, trackFeatures({
       impliedTargetStrengthDb: -7,
       snrDb: 4,
-      signatureCorrelation: 0.1,
-      observationCount: 1,
-    });
+    }));
     for (let index = 1; index <= 20; index += 1) {
-      subClass = classifier.update(1, index, sub, {
-        impliedTargetStrengthDb: 14,
-        snrDb: 10,
-        signatureCorrelation: 0.1,
+      subClass = classifier.update(1, index, sub, trackFeatures({
         observationCount: index,
-      });
-      whaleClass = classifier.update(2, index, whale, {
+      }));
+      whaleClass = classifier.update(2, index, whale, trackFeatures({
         impliedTargetStrengthDb: -7,
         snrDb: 4,
-        signatureCorrelation: 0.1,
         observationCount: index,
-      });
+      }));
     }
     expect(subClass.best).toBe("sub-like");
     expect(subClass.confidence).toBeGreaterThan(0.6);
@@ -137,19 +139,16 @@ describe("classification from observables", () => {
   it("keeps an ambiguous echo honestly uncertain", { timeout: 60000 }, () => {
     const classifier = new ContactClassifier();
     const estimate = trackEstimate({ velocity: { x: -4, y: 0 } });
-    let classification = classifier.update(1, 0, estimate, {
+    let classification = classifier.update(1, 0, estimate, trackFeatures({
       impliedTargetStrengthDb: 8,
       snrDb: 6,
-      signatureCorrelation: 0.1,
-      observationCount: 1,
-    });
+    }));
     for (let index = 1; index <= 15; index += 1) {
-      classification = classifier.update(1, index, estimate, {
+      classification = classifier.update(1, index, estimate, trackFeatures({
         impliedTargetStrengthDb: 8 + 6 * Math.sin(index),
         snrDb: 6,
-        signatureCorrelation: 0.1,
         observationCount: index,
-      });
+      }));
     }
     expect(classification.confidence).toBeLessThan(0.9);
   });
@@ -225,7 +224,7 @@ describe("TEWA selection and authorization", () => {
     state = updateTewa({
       state, now: 1, ownPosition: own, doctrine,
       candidates: [
-        { trackId: 1, estimate: trackEstimate(), quality: "confirmed", depth: null, classification: { best: "sub-like", confidence: 0.8, probabilities: {} as never } },
+        { trackId: 1, estimate: trackEstimate(), quality: "confirmed", depth: null, createdAt: 0, classification: { best: "sub-like", confidence: 0.8, probabilities: {} as never } },
       ],
     });
     expect(state.designation?.trackId).toBe(1);
@@ -233,8 +232,8 @@ describe("TEWA selection and authorization", () => {
     state = updateTewa({
       state, now: 3, ownPosition: own, doctrine,
       candidates: [
-        { trackId: 1, estimate: trackEstimate(), quality: "confirmed", depth: null, classification: { best: "sub-like", confidence: 0.6, probabilities: {} as never } },
-        { trackId: 2, estimate: trackEstimate(), quality: "confirmed", depth: null, classification: { best: "sub-like", confidence: 0.75, probabilities: {} as never } },
+        { trackId: 1, estimate: trackEstimate(), quality: "confirmed", depth: null, createdAt: 0, classification: { best: "sub-like", confidence: 0.6, probabilities: {} as never } },
+        { trackId: 2, estimate: trackEstimate(), quality: "confirmed", depth: null, createdAt: 0, classification: { best: "sub-like", confidence: 0.75, probabilities: {} as never } },
       ],
     });
     expect(state.designation?.trackId).toBe(1);
@@ -242,8 +241,8 @@ describe("TEWA selection and authorization", () => {
     state = updateTewa({
       state, now: 8, ownPosition: own, doctrine,
       candidates: [
-        { trackId: 1, estimate: trackEstimate(), quality: "confirmed", depth: null, classification: { best: "sub-like", confidence: 0.3, probabilities: {} as never } },
-        { trackId: 2, estimate: trackEstimate(), quality: "confirmed", depth: null, classification: { best: "sub-like", confidence: 0.9, probabilities: {} as never } },
+        { trackId: 1, estimate: trackEstimate(), quality: "confirmed", depth: null, createdAt: 0, classification: { best: "sub-like", confidence: 0.3, probabilities: {} as never } },
+        { trackId: 2, estimate: trackEstimate(), quality: "confirmed", depth: null, createdAt: 0, classification: { best: "sub-like", confidence: 0.9, probabilities: {} as never } },
       ],
     });
     expect(state.designation?.trackId).toBe(2);

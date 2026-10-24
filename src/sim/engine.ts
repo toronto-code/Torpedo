@@ -320,6 +320,7 @@ export class SimulationEngine {
         estimate: track.estimate,
         quality: track.meta.quality,
         depth: track.meta.depth,
+        createdAt: track.meta.createdAt,
         classification: this.classifier.update(
           track.meta.id,
           this.timestamp,
@@ -339,8 +340,10 @@ export class SimulationEngine {
             { x: this.torpedo.position.x, y: this.torpedo.position.y },
             this.config.acoustic?.targetStrengthDb ?? 0,
           ),
+          impliedTsSigmaDb: null,
           snrDb: null,
           signatureCorrelation: runtime.spec.friendlySignature ?? 0.1,
+          depthRateMPerS: Math.abs(runtime.state.depthRate),
           observationCount: 1,
         };
         const classification: TrackClassification = this.classifier.update(
@@ -354,6 +357,7 @@ export class SimulationEngine {
           estimate,
           quality: "confirmed",
           depth: runtime.state.depth,
+          createdAt: 0,
           classification,
         };
       });
@@ -875,6 +879,7 @@ export class SimulationEngine {
       nees,
       weapon: this.buildWeaponTelemetry(),
       contacts: this.buildContactTruth(),
+      engagement: this.buildEngagementTelemetry(),
       acoustic: this.latestAcoustic,
     };
   }

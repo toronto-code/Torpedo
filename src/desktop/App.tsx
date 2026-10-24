@@ -263,6 +263,41 @@ export function App() {
       : view.telemetry,
     [activeReplay, replayTime, view.telemetry],
   );
+  // Engagement pipeline events derived from telemetry transitions, so the
+  // timeline is available live and in replay without engine changes.
+  const engagementEvents = useMemo(() => {
+    const events: {
+      at: number;
+      kind: "designate" | "redesignate" | "lost" | "authorize";
+      label: string;
+    }[] = [];
+    let designated: number | null = null;
+    let authorized = false;
+    for (const sample of displayTelemetry) {
+      const engagement = sample.engagement;
+      if (!engagement) continue;
+      if (engagement.designatedTrackId !== designated) {
+        const next: number | null = engagement.designatedTrackId;
+        if (next === null && designated !== null) {
+          events.push({ at: sample.timestamp, kind: "lost", label: `track ${designated} lost` });
+        } else if (next !== null && designated === null) {
+          events.push({ at: sample.timestamp, kind: "designate", label: `designate track ${next}` });
+        } else if (next !== null) {
+          events.push({ at: sample.timestamp, kind: "redesignate", label: `redesignate ${designated} → ${next}` });
+        }
+        designated = next;
+      }
+      if (engagement.authorized && !authorized) {
+        authorized = true;
+        events.push({
+          at: sample.timestamp,
+          kind: "authorize",
+          label: `authorized${designated !== null ? ` · track ${designated}` : ""}`,
+        });
+      }
+    }
+    return events;
+  }, [displayTelemetry]);
   const replayHistory = useMemo(
     () => activeReplay?.frames.slice(0, replayFrameIndex + 1).map((frame) => frame.snapshot),
     [activeReplay, replayFrameIndex],
@@ -393,7 +428,12 @@ export function App() {
         </section>
 
         <div className="right-stack">
-          <TelemetryPanel snapshot={displaySnapshot} config={config} />
+          <TelemetryPanel
+            snapshot={displaySnapshot}
+            config={config}
+            events={engagementEvents}
+            eventDuration={config.runtime.maxTime}
+          />
           <section className="run-record">
             <div className="panel-title"><span>RUN RECORD</span><span>IMMUTABLE AFTER INIT</span></div>
             <dl>

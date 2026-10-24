@@ -119,7 +119,9 @@ export class ContactClassifier {
         ? state.wanderAccumulator / state.wanderSamples
         : 0;
     const impliedTs = features.impliedTargetStrengthDb;
+    const tsSigma = features.impliedTsSigmaDb;
     const correlation = features.signatureCorrelation;
+    const depthRate = features.depthRateMPerS;
 
     for (const cls of CLASSES) {
       if (cls === "unknown") continue;
@@ -142,6 +144,35 @@ export class ContactClassifier {
         } else if (correlation > 0.5) {
           likelihood -= 4 * (correlation - 0.5);
         }
+      }
+      // Depth behavior (measured, not truth): sustained vertical motion is
+      // submarine-like; surface traffic and decoys hold depth. Whales dive
+      // gently, so biologics earn a smaller share.
+      if (depthRate !== null && depthRate > 0.3) {
+        const motion = Math.min(1, depthRate / 1.2);
+        if (cls === "sub-like" || cls === "friendly-sub") likelihood += 1.6 * motion;
+        else if (cls === "biological") likelihood += 0.6 * motion;
+        else likelihood -= 0.8 * motion;
+      }
+      // Depth-static penalty: a long-tracked contact whose depth never
+      // moves is less submarine-like — real boats trim and re-depth, while
+      // decoys and fluctuators hold exactly level. Grows with evidence so
+      // young tracks are unaffected.
+      if (
+        depthRate !== null &&
+        depthRate < 0.05 &&
+        features.observationCount > 30
+      ) {
+        const staticPenalty =
+          Math.min(1, (features.observationCount - 30) / 120) * 0.9;
+        if (cls === "sub-like" || cls === "friendly-sub") {
+          likelihood -= staticPenalty;
+        }
+      }
+      // Echo stability: a streaky, fluctuating return (high TS sigma) is
+      // less like any clean class; smooth aspect-driven returns are.
+      if (tsSigma !== null && tsSigma > 3) {
+        likelihood -= Math.min(1, (tsSigma - 3) / 6);
       }
       state.evidence[cls] =
         state.evidence[cls] * (1 - LEARNING_RATE) + likelihood * LEARNING_RATE;

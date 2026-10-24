@@ -94,6 +94,10 @@ export interface DoctrineConfig {
   engagementMaxRange?: number;
   /** Seconds the doctrine must hold before autonomous authorization. */
   autoAuthorizeSustain: number;
+  /** Optional minimum track age (s) before autonomous authorization: the
+   *  picture-development window during which classification evidence
+   *  matures. Absent authorizes on confidence alone. */
+  minTrackAgeS?: number;
   /** Minimum seconds a designation is held before switching. */
   redesignateAfter: number;
   /** Score margin a challenger needs to take the designation. */
@@ -338,6 +342,12 @@ export interface EstimatorConfig {
   initialVelocityVariance: number;
   innovationGate: number;
   staleAfter: number;
+  /** Optional maneuver adaptation: when an innovation exceeds the gate, the
+   *  update is retried once with process noise inflated by this factor (the
+   *  constant-velocity model momentarily distrustusted, as in a Singer-style
+   *  maneuver model) and accepted if it then passes. Absent keeps the
+   *  fixed-noise filter bit-identical. */
+  maneuverNoiseScale?: number;
 }
 
 export interface GuidanceConfig {
@@ -553,6 +563,7 @@ export interface TelemetrySample {
   nees: number | null;
   weapon?: WeaponTelemetry;
   contacts?: ContactTruth[];
+  engagement?: EngagementTelemetry;
   acoustic?: AcousticChannelState | null;
 }
 

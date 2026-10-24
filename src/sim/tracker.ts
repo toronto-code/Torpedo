@@ -14,10 +14,15 @@ export type TrackQuality = "tentative" | "confirmed" | "coasting" | "deleted";
 export interface TrackFeatures {
   /** Mean implied target strength (dB): echo level with spreading removed. */
   impliedTargetStrengthDb: number | null;
+  /** Running 1-sigma of the implied target strength (dB): echo stability.
+   *  Streaky/fluctuating returns score high; aspect-driven returns low. */
+  impliedTsSigmaDb: number | null;
   /** Last measured signal-to-noise ratio (dB). */
   snrDb: number | null;
   /** Mean synthetic friendly-marking correlation (0..1). */
   signatureCorrelation: number | null;
+  /** Smoothed |depth rate| from depression-angle measurements (m/s). */
+  depthRateMPerS: number | null;
   observationCount: number;
 }
 
@@ -45,6 +50,13 @@ interface InternalTrack {
   raw: RawObservationTracker;
   impliedTsSum: number;
   correlationSum: number;
+  // Welford running variance for implied target strength.
+  tsMean: number;
+  tsVariance: number;
+  tsCount: number;
+  // Depth-rate smoothing from successive depth observations.
+  lastDepthAt: number | null;
+  lastDepthValue: number;
 }
 
 export interface TrackerOptions {
@@ -201,8 +213,10 @@ export class MultiTargetTracker {
         quality: "tentative",
         features: {
           impliedTargetStrengthDb: null,
+          impliedTsSigmaDb: null,
           snrDb: null,
           signatureCorrelation: null,
+          depthRateMPerS: null,
           observationCount: 0,
         },
         depth: null,
@@ -211,6 +225,11 @@ export class MultiTargetTracker {
       raw: new RawObservationTracker(),
       impliedTsSum: 0,
       correlationSum: 0,
+      tsMean: 0,
+      tsVariance: 0,
+      tsCount: 0,
+      lastDepthAt: null,
+      lastDepthValue: 0,
     };
     track.ekf.process(observation);
     track.raw.process(observation);
@@ -229,6 +248,16 @@ export class MultiTargetTracker {
       track.impliedTsSum += observation.impliedTargetStrengthDb;
       features.impliedTargetStrengthDb =
         track.impliedTsSum / features.observationCount;
+      // Welford running variance: echo stability is a classification cue
+      // (streaky fluctuators vs smooth aspect-driven returns).
+      track.tsCount += 1;
+      const delta = observation.impliedTargetStrengthDb - track.tsMean;
+      track.tsMean += delta / track.tsCount;
+      track.tsVariance += delta * (observation.impliedTargetStrengthDb - track.tsMean);
+      features.impliedTsSigmaDb =
+        track.tsCount >= 3
+          ? Math.sqrt(Math.max(0, track.tsVariance / (track.tsCount - 1)))
+          : null;
     }
     if (observation.signatureCorrelation !== undefined) {
       track.correlationSum += observation.signatureCorrelation;
@@ -242,6 +271,19 @@ export class MultiTargetTracker {
         track.meta.depth === null
           ? observation.targetDepth
           : track.meta.depth + 0.35 * (observation.targetDepth - track.meta.depth);
+      if (track.lastDepthAt !== null) {
+        const dt = observation.observedAt - track.lastDepthAt;
+        if (dt > 1e-3) {
+          const rate =
+            Math.abs(observation.targetDepth - track.lastDepthValue) / dt;
+          features.depthRateMPerS =
+            features.depthRateMPerS === null
+              ? rate
+              : features.depthRateMPerS + 0.25 * (rate - features.depthRateMPerS);
+        }
+      }
+      track.lastDepthAt = observation.observedAt;
+      track.lastDepthValue = observation.targetDepth;
     }
   }
 
