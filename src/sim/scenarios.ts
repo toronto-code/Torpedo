@@ -42,13 +42,16 @@ export function createAmbiguityScenarioConfig(
 ): SimulationConfig {
   const config = createDefaultConfig();
   config.seed = seed;
-  config.runtime.maxTime = 120;
+  config.runtime.maxTime = 200;
   config.guidance.mode = "ekf";
   config.interceptRadius = 14;
   config.torpedo.commandedSpeed = 30;
   // Speed-dependent self-noise: sprinting degrades the weapon's own
   // receiver. Synthetic values.
   config.sensor.selfNoise = { baseDb: 52, dbPerMs: 0.55 };
+  // Depression-angle depth reporting so the weapon can dive with a contact
+  // that goes below the layer. Synthetic noise level.
+  config.sensor.depthSigmaM = 8;
   // Depth-dependent sound speed with a mid-range shadow band when the
   // weapon and contact straddle the layer. Synthetic values.
   config.environment = config.environment ?? createDefaultConfig().environment!;
@@ -65,7 +68,9 @@ export function createAmbiguityScenarioConfig(
     phases: { enableTime: 4, terminalRange: 500, reacquireAfter: 3 },
     speed: { cruiseSpeed: 30, sprintSpeed: 40 },
     endurance: {
-      battery: { capacityWs: 3.2e6, hotelW: 200, dragKW: 0.8 },
+      // Heavyweight-class synthetic battery: ~6 min cruise / ~2.5 min
+      // sprint, so a 2 km transit plus terminal sprint fits comfortably.
+      battery: { capacityWs: 8.5e6, hotelW: 200, dragKW: 0.8 },
     },
     terminalSensor: { cadenceHz: 20, innovationGate: 9, fovHalfAngle: (80 * Math.PI) / 180 },
     fuze: { detectionRadius: 25 },

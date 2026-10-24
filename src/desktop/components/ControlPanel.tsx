@@ -5,6 +5,7 @@ import type {
   ScenarioKind,
   SimulationConfig,
 } from "../../sim/types";
+import type { AmbiguityPreset } from "../../sim/scenarios";
 import {
   applyHydrodynamicProfile,
   HYDRODYNAMIC_PROFILES,
@@ -18,6 +19,8 @@ interface Props {
   timeScale: number;
   showTruth: boolean;
   showDiagnostics: boolean;
+  scenario: AmbiguityPreset;
+  onScenario: (preset: AmbiguityPreset) => void;
   onConfig: (config: SimulationConfig) => void;
   onTimeScale: (scale: number) => void;
   onTruth: (value: boolean) => void;
@@ -108,6 +111,19 @@ export function ControlPanel(props: Props) {
       <div className="panel-title"><span>EXPERIMENT MANIFEST</span><span>{configLocked ? "LOCKED" : `REV ${props.config.version}`}</span></div>
 
       <fieldset disabled={configLocked}>
+        <label>SCENARIO PRESET</label>
+        <select
+          value={props.scenario}
+          disabled={configLocked}
+          onChange={(event) => props.onScenario(event.target.value as AmbiguityPreset)}
+        >
+          <option value="crossing-subs">Crossing subs · association</option>
+          <option value="cluttered-approach">Cluttered approach · classification</option>
+          <option value="decoy-stress">Decoy stress · seduction</option>
+          <option value="ambiguous-fluctuator">Ambiguous fluctuator · confidence</option>
+          <option value="high-ambiguity">High ambiguity · combined</option>
+        </select>
+
         <label>SENSOR INPUT</label>
         <Choice<ObservationMode>
           value={props.config.guidance.mode}

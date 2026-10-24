@@ -18,8 +18,10 @@ export type { HomingState, PhaseTransition, PhaseUpdate } from "./homing";
 export {
   fuzeArmedAt,
   fuzeTriggers,
+  initialFuzeState,
   syntheticEffectiveness,
   updateFuzeArming,
+  updateProximityFuze,
 } from "./fuze";
 export {
   RESEARCH_INTERFACE_CAPABILITIES,

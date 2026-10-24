@@ -29,6 +29,9 @@ export interface TrackMeta {
   acceptedCount: number;
   quality: TrackQuality;
   features: TrackFeatures;
+  /** Smoothed depression-angle contact depth (m, positive down); null until
+   *  a depth-bearing observation arrives. Steering aid, not identity. */
+  depth: number | null;
 }
 
 export interface LiveTrack {
@@ -172,6 +175,15 @@ export class MultiTargetTracker {
     return this.estimateOf(track, now);
   }
 
+  /** Smoothed depth estimate for a track (m down), or null when none. */
+  depthForTrack(trackId: number): number | null {
+    const track = this.tracks.find(
+      (candidate) => candidate.meta.id === trackId,
+    );
+    if (!track || track.meta.quality === "deleted") return null;
+    return track.meta.depth;
+  }
+
   private estimateOf(track: InternalTrack, now: number): TrackEstimate | null {
     return this.mode === "ekf"
       ? track.ekf.estimateAt(now)
@@ -193,6 +205,7 @@ export class MultiTargetTracker {
           signatureCorrelation: null,
           observationCount: 0,
         },
+        depth: null,
       },
       ekf: new ExtendedKalmanFilter(this.options.estimator),
       raw: new RawObservationTracker(),
@@ -221,6 +234,14 @@ export class MultiTargetTracker {
       track.correlationSum += observation.signatureCorrelation;
       features.signatureCorrelation =
         track.correlationSum / features.observationCount;
+    }
+    if (observation.targetDepth !== undefined) {
+      // Exponential smoothing keeps up with a 1-2 m/s dive while averaging
+      // down the depression-angle noise.
+      track.meta.depth =
+        track.meta.depth === null
+          ? observation.targetDepth
+          : track.meta.depth + 0.35 * (observation.targetDepth - track.meta.depth);
     }
   }
 

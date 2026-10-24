@@ -147,7 +147,7 @@ input[type="range"] { width: 100%; height: 15px; margin-top: 3px; accent-color: 
 .frame-indicator b { position: absolute; left: 7px; bottom: 7px; width: 7px; height: 7px; border: 1px solid #92999c; border-radius: 50%; }
 .frame-indicator .axis-x { position: absolute; right: 0; bottom: 6px; font-style: normal; }.frame-indicator .axis-z { position: absolute; left: 4px; top: 0; font-style: normal; }
 .result-banner, .error-banner { position: absolute; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; align-items: center; padding: 7px 10px; color: #bfc3c5; font: 600 8px var(--mono); background: rgba(29,32,34,.96); border: 1px solid var(--line-strong); }
-.result-banner { bottom: 10px; }.result-banner.intercept strong { color: var(--green); }.result-banner.timeout strong { color: var(--amber); }.result-banner.invalid-state strong, .error-banner { color: var(--red); }
+.result-banner { bottom: 10px; }.result-banner.intercept strong, .result-banner.fuzed-detonation strong { color: var(--green); }.result-banner.timeout strong, .result-banner.endurance-exhausted strong { color: var(--amber); }.result-banner.invalid-state strong, .error-banner { color: var(--red); }
 .error-banner { top: 10px; }
 
 .right-stack { display: grid; grid-template-rows: minmax(260px, 1fr) auto; gap: 5px; min-height: 0; }

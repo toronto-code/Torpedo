@@ -8,6 +8,7 @@ import {
 } from "../src/sim/fire-control";
 import {
   fuzeTriggers,
+  initialFuzeState,
   syntheticEffectiveness,
   updateFuzeArming,
 } from "../src/sim/fuze";
@@ -273,7 +274,7 @@ describe("homing phase machine", () => {
 
 describe("fuze and synthetic effectiveness", () => {
   it("arms on schedule and triggers inside the detection radius", () => {
-    let state = { armed: false };
+    let state = initialFuzeState();
     state = updateFuzeArming(state, 3.9, 4);
     expect(state.armed).toBe(false);
     state = updateFuzeArming(state, 4.0, 4);

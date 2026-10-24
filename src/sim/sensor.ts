@@ -98,11 +98,13 @@ export class SeekerModel {
       noise: SeededRandom;
       dropout: SeededRandom;
       channel: SeededRandom;
+      depth?: SeededRandom | null;
     }[],
     fallbackStreams: {
       noise: SeededRandom;
       dropout: SeededRandom;
       channel: SeededRandom;
+      depth?: SeededRandom | null;
     },
   ): SensorSample[] | null {
     if (timestamp + 1e-10 < this.nextSampleTime) return null;
@@ -119,6 +121,7 @@ export class SeekerModel {
         contact.friendlySignature ?? 0.1,
         stream.dropout,
         stream.channel,
+        stream.depth,
       );
     });
   }
@@ -133,6 +136,7 @@ export class SeekerModel {
     friendlySignature: number | undefined,
     dropout: SeededRandom,
     channelRandom: SeededRandom | undefined,
+    depthRandom: SeededRandom | null = null,
   ): SensorSample {
     const relative = subtract2(target.position, sensor.position);
     const range = magnitude2(relative);
@@ -214,6 +218,14 @@ export class SeekerModel {
       observation.signatureCorrelation = Math.min(
         1,
         Math.max(0, friendlySignature + noise.gaussian(0, 0.04)),
+      );
+    }
+    if (depthRandom && this.config.depthSigmaM !== undefined) {
+      // Depression-angle-derived depth from a dedicated stream so the
+      // legacy single-return draw sequence stays bit-identical.
+      observation.targetDepth = Math.max(
+        0,
+        target.depth + depthRandom.gaussian(0, this.config.depthSigmaM),
       );
     }
     return { status: "locked", observation, acoustic: channel };

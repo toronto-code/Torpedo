@@ -250,6 +250,10 @@ export interface SensorConfig {
   latency: number;
   /** Optional speed-dependent self-noise; absent keeps the legacy channel. */
   selfNoise?: SelfNoiseConfig;
+  /** Optional 1-sigma noise on depression-angle-derived contact depth (m).
+   *  Only the multi-return path reports depth; absent keeps observations
+   *  bit-identical to the legacy stream. */
+  depthSigmaM?: number;
 }
 
 export interface EnvironmentConfig {
@@ -459,6 +463,10 @@ export interface SensorObservation {
   /** Synthetic friendly-marking correlation (0..1); a fictional IFF analog
    *  measured by the receiver. A measurement feature, not an identity. */
   signatureCorrelation?: number;
+  /** Depression-angle-derived contact depth (m, positive down). Consumed
+   *  only by depth steering, never by the horizontal estimator. Absent on
+   *  the legacy single-return path. */
+  targetDepth?: number;
 }
 
 export interface TrackEstimate {

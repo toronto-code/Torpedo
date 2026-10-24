@@ -225,7 +225,7 @@ describe("TEWA selection and authorization", () => {
     state = updateTewa({
       state, now: 1, ownPosition: own, doctrine,
       candidates: [
-        { trackId: 1, estimate: trackEstimate(), quality: "confirmed", classification: { best: "sub-like", confidence: 0.8, probabilities: {} as never } },
+        { trackId: 1, estimate: trackEstimate(), quality: "confirmed", depth: null, classification: { best: "sub-like", confidence: 0.8, probabilities: {} as never } },
       ],
     });
     expect(state.designation?.trackId).toBe(1);
@@ -233,8 +233,8 @@ describe("TEWA selection and authorization", () => {
     state = updateTewa({
       state, now: 3, ownPosition: own, doctrine,
       candidates: [
-        { trackId: 1, estimate: trackEstimate(), quality: "confirmed", classification: { best: "sub-like", confidence: 0.6, probabilities: {} as never } },
-        { trackId: 2, estimate: trackEstimate(), quality: "confirmed", classification: { best: "sub-like", confidence: 0.75, probabilities: {} as never } },
+        { trackId: 1, estimate: trackEstimate(), quality: "confirmed", depth: null, classification: { best: "sub-like", confidence: 0.6, probabilities: {} as never } },
+        { trackId: 2, estimate: trackEstimate(), quality: "confirmed", depth: null, classification: { best: "sub-like", confidence: 0.75, probabilities: {} as never } },
       ],
     });
     expect(state.designation?.trackId).toBe(1);
@@ -242,8 +242,8 @@ describe("TEWA selection and authorization", () => {
     state = updateTewa({
       state, now: 8, ownPosition: own, doctrine,
       candidates: [
-        { trackId: 1, estimate: trackEstimate(), quality: "confirmed", classification: { best: "sub-like", confidence: 0.3, probabilities: {} as never } },
-        { trackId: 2, estimate: trackEstimate(), quality: "confirmed", classification: { best: "sub-like", confidence: 0.9, probabilities: {} as never } },
+        { trackId: 1, estimate: trackEstimate(), quality: "confirmed", depth: null, classification: { best: "sub-like", confidence: 0.3, probabilities: {} as never } },
+        { trackId: 2, estimate: trackEstimate(), quality: "confirmed", depth: null, classification: { best: "sub-like", confidence: 0.9, probabilities: {} as never } },
       ],
     });
     expect(state.designation?.trackId).toBe(2);

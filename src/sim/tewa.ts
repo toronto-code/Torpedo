@@ -27,6 +27,9 @@ export interface TewaCandidate {
   estimate: TrackEstimate;
   classification: TrackClassification;
   quality: string;
+  /** Smoothed depression-angle depth (m down) for depth steering; measurement
+   *  data, never truth. Null until a depth-bearing observation arrives. */
+  depth: number | null;
 }
 
 export interface TewaState {

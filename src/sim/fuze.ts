@@ -18,6 +18,20 @@ import type { SeededRandom } from "./random";
 
 export interface FuzeState {
   armed: boolean;
+  /** Previous true separation (m); null before the first armed sample. */
+  lastSeparation: number | null;
+  insideVolume: boolean;
+  /** Smallest separation observed inside the detection volume (m). */
+  bestInsideSeparation: number | null;
+}
+
+export function initialFuzeState(): FuzeState {
+  return {
+    armed: false,
+    lastSeparation: null,
+    insideVolume: false,
+    bestInsideSeparation: null,
+  };
 }
 
 export function fuzeArmedAt(weapon: { phases?: { enableTime?: number }; fuze?: FuzeConfig }): number {
@@ -29,7 +43,7 @@ export function updateFuzeArming(
   timestamp: number,
   armAt: number,
 ): FuzeState {
-  if (!state.armed && timestamp >= armAt) return { armed: true };
+  if (!state.armed && timestamp >= armAt) return { ...state, armed: true };
   return state;
 }
 
@@ -46,6 +60,71 @@ export function fuzeTriggers(
       ? Math.max(0, radius + jitterRandom.gaussian(0, jitter))
       : radius;
   return trueSeparationMeters <= effectiveRadius;
+}
+
+export interface ProximityFuzeUpdate {
+  state: FuzeState;
+  detonate: boolean;
+  /** Separation to report as the fuze miss distance when detonating. */
+  detonationSeparation: number | null;
+}
+
+/**
+ * Closest-point proximity fuze: like a real influence fuze it holds while
+ * the separation still closes inside the detection volume and fires at the
+ * closest point of approach (or on leaving the volume, reporting the best
+ * separation seen inside, so a grazing pass still detonates). A small
+ * fraction-of-radius floor guarantees a trigger on very fast fly-throughs.
+ */
+export function updateProximityFuze(
+  state: FuzeState,
+  trueSeparationMeters: number,
+  fuze: FuzeConfig,
+  jitterRandom?: SeededRandom,
+): ProximityFuzeUpdate {
+  const radius = fuze.detectionRadius ?? 0;
+  const jitter = fuze.jitter ?? 0;
+  const effectiveRadius =
+    jitter > 0 && jitterRandom
+      ? Math.max(0, radius + jitterRandom.gaussian(0, jitter))
+      : radius;
+  const inside = radius > 0 && trueSeparationMeters <= effectiveRadius;
+  const closing =
+    state.lastSeparation === null ||
+    trueSeparationMeters < state.lastSeparation;
+  const bestInside = inside
+    ? Math.min(
+        state.bestInsideSeparation ?? Number.POSITIVE_INFINITY,
+        trueSeparationMeters,
+      )
+    : state.bestInsideSeparation;
+
+  let detonate = false;
+  let detonationSeparation: number | null = null;
+  if (inside) {
+    // Fire at the closest approach: separation stopped closing, or the
+    // weapon is deep enough inside that waiting costs nothing.
+    if (!closing || trueSeparationMeters <= radius * 0.35) {
+      detonate = true;
+      detonationSeparation = trueSeparationMeters;
+    }
+  } else if (state.insideVolume) {
+    // Left the volume without a closest-point trigger (grazing geometry):
+    // fire on exit at the best separation observed inside.
+    detonate = true;
+    detonationSeparation = bestInside ?? state.lastSeparation;
+  }
+
+  return {
+    state: {
+      ...state,
+      lastSeparation: trueSeparationMeters,
+      insideVolume: inside,
+      bestInsideSeparation: bestInside,
+    },
+    detonate,
+    detonationSeparation,
+  };
 }
 
 /** Synthetic point-effectiveness score in [0, 1]; fictional calibration. */

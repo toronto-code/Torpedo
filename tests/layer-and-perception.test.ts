@@ -42,7 +42,6 @@ describe("sound-speed profile and refraction", () => {
   });
 
   it("penalizes layer-straddling paths inside the recovery range only", () => {
-    const env = environment();
     expect(refractionLossDb(profile, 20, 120, 2000)).toBeCloseTo(12, 9);
     expect(refractionLossDb(profile, 20, 120, 4000)).toBeCloseTo(8, 9);
     expect(refractionLossDb(profile, 20, 120, 5500)).toBeCloseTo(0, 9);

@@ -6,7 +6,7 @@ import { parseReplay, serializeReplay } from "../replay/codec";
 import { telemetryThroughTime } from "../replay/timeline";
 import type { ReplayFile, ReplayVerification } from "../replay/types";
 import { hashConfig } from "../sim/config";
-import { createAmbiguityScenarioConfig } from "../sim/scenarios";
+import { createAmbiguityScenarioConfig, type AmbiguityPreset } from "../sim/scenarios";
 import { telemetryToCsv } from "../sim/csv";
 import type { SimulationConfig } from "../sim/types";
 import { AnalysisPanel } from "./components/AnalysisPanel";
@@ -28,22 +28,15 @@ const degrees = (value: number) => (value * 180) / Math.PI;
 
 export function App() {
   const [runtime, view] = useSimulation();
-  // The interactive default is the full 3D experience: six-DOF dynamics,
-  // phased weapon engagement, and the orbit camera. Headless/reference
-  // configurations remain legacy planar.
-  const [config, setConfig] = useState<SimulationConfig>(() => {
-    const initial = createAmbiguityScenarioConfig("high-ambiguity");
-    initial.dynamics.model = "six-dof";
-    initial.weapon = {
-      phases: { enableTime: 4, terminalRange: 400, reacquireAfter: 2 },
-      speed: { cruiseSpeed: 30, sprintSpeed: 40 },
-      endurance: { runTime: 90 },
-      terminalSensor: { cadenceHz: 20, innovationGate: 6 },
-      fuze: { detectionRadius: 18 },
-      effectiveness: { lethalRadius: 12, shape: 2 },
-    };
-    return initial;
-  });
+  // The interactive default is the tuned high-ambiguity preset: six contacts,
+  // phased weapon engagement with an energy battery, and the orbit camera.
+  // The preset's weapon block and planar weapon dynamics are kept intact —
+  // they are the configuration the engagement studies validate. Seed chosen
+  // so the first-run story is a clean hostile interception.
+  const [config, setConfig] = useState<SimulationConfig>(() =>
+    createAmbiguityScenarioConfig("high-ambiguity", 20260816),
+  );
+  const [scenario, setScenario] = useState<AmbiguityPreset>("high-ambiguity");
   const [cameraMode, setCameraMode] = useState<CameraMode>("orbit");
   const [timeScale, setTimeScale] = useState(1);
   const [showTruth, setShowTruth] = useState(true);
@@ -75,6 +68,14 @@ export function App() {
     runtime.recordConfigChange(config, next);
     setConfig(next);
     setVerification(null);
+  };
+
+  // Selecting a scenario preset starts a fresh experiment from the tuned
+  // preset: per-contact noise, doctrine, and the weapon block all come from
+  // the scenario, so the engagement studies stay representative.
+  const selectScenario = (preset: AmbiguityPreset) => {
+    setScenario(preset);
+    updateConfig(createAmbiguityScenarioConfig(preset, config.seed));
   };
 
   const updateTruth = (next: boolean) => {
@@ -310,6 +311,8 @@ export function App() {
           timeScale={timeScale}
           showTruth={showTruth}
           showDiagnostics={showDiagnostics}
+          scenario={scenario}
+          onScenario={selectScenario}
           onConfig={updateConfig}
           onTimeScale={updateTimeScale}
           onTruth={updateTruth}

@@ -174,6 +174,12 @@ function disposeObject(object: THREE.Object3D): void {
       child.geometry?.dispose();
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       for (const material of materials) {
+        // The HUD diamond texture is shared module-wide and must survive a
+        // scene teardown (hot reload, panel remount).
+        if (material instanceof THREE.SpriteMaterial && material.map === diamondTexture) {
+          material.dispose();
+          continue;
+        }
         if (material instanceof THREE.SpriteMaterial) material.map?.dispose();
         material?.dispose();
       }
@@ -190,17 +196,91 @@ const CONTACT_COLORS: Record<string, number> = {
   ambiguous: 0xd4a7dd,
 };
 
+let diamondTexture: THREE.CanvasTexture | null = null;
+
+/** HUD diamond shared by every contact marker; tinted per material. */
+function getDiamondTexture(): THREE.CanvasTexture {
+  if (diamondTexture) return diamondTexture;
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const context = canvas.getContext("2d")!;
+  context.translate(32, 32);
+  context.rotate(Math.PI / 4);
+  context.fillStyle = "#ffffff";
+  context.fillRect(-17, -17, 34, 34);
+  context.lineWidth = 5;
+  context.strokeStyle = "#10181c";
+  context.strokeRect(-17, -17, 34, 34);
+  diamondTexture = new THREE.CanvasTexture(canvas);
+  diamondTexture.colorSpace = THREE.SRGBColorSpace;
+  return diamondTexture;
+}
+
+function createLabelSprite(text: string): THREE.Sprite {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 64;
+  const context = canvas.getContext("2d")!;
+  context.font = "600 34px ui-monospace, Menlo, monospace";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillStyle = "#dfe6e9";
+  context.shadowColor = "rgba(0, 0, 0, 0.9)";
+  context.shadowBlur = 6;
+  context.fillText(text.toUpperCase(), canvas.width / 2, canvas.height / 2);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      fog: false,
+    }),
+  );
+  // Float the label above its anchor point, clear of the marker diamond.
+  sprite.center.set(0.5, -1.1);
+  sprite.renderOrder = 997;
+  return sprite;
+}
+
+function createMarkerSprite(color: number): THREE.Sprite {
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: getDiamondTexture(),
+      color,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      fog: false,
+    }),
+  );
+  sprite.renderOrder = 999;
+  return sprite;
+}
+
+interface ContactVisual {
+  group: THREE.Group;
+  marker: THREE.Sprite;
+  label: THREE.Sprite;
+  trail: Trail;
+}
+
 /**
- * Stable per-contact truth meshes (rendering/scoring surface only — the
+ * Stable per-contact truth visuals (rendering/scoring surface only — the
  * guidance chain never sees them). One mesh per contact id, so a mesh is
- * never reassigned between different physical contacts.
+ * never reassigned between different physical contacts. Each contact also
+ * gets a fixed-screen-size HUD diamond, a name label, and a truth trail so
+ * the tactical picture stays readable at multi-kilometre camera ranges.
  */
 class ContactMeshPool {
-  private readonly meshes = new Map<string, THREE.Group>();
+  private readonly visuals = new Map<string, ContactVisual>();
 
   constructor(private readonly scene: THREE.Scene) {}
 
-  private createContactMesh(kind: string): THREE.Group {
+  private createVisual(id: string, kind: string): ContactVisual {
     const color = CONTACT_COLORS[kind] ?? 0xa0a0a0;
     const group = new THREE.Group();
     let geometry: THREE.BufferGeometry;
@@ -218,7 +298,14 @@ class ContactMeshPool {
       );
       mesh.rotation.z = Math.PI / 2;
       group.add(mesh);
-      return group;
+      const visual: ContactVisual = {
+        group,
+        marker: createMarkerSprite(color),
+        label: createLabelSprite(id),
+        trail: new Trail({ color, opacity: 0.5, limit: 1_200 }),
+      };
+      this.scene.add(group, visual.marker, visual.label, visual.trail.line);
+      return visual;
     }
     group.add(
       new THREE.Mesh(
@@ -226,7 +313,14 @@ class ContactMeshPool {
         new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.2 }),
       ),
     );
-    return group;
+    const visual: ContactVisual = {
+      group,
+      marker: createMarkerSprite(color),
+      label: createLabelSprite(id),
+      trail: new Trail({ color, opacity: 0.5, limit: 1_200 }),
+    };
+    this.scene.add(group, visual.marker, visual.label, visual.trail.line);
+    return visual;
   }
 
   update(
@@ -239,36 +333,96 @@ class ContactMeshPool {
     }[],
     visible: boolean,
     scratch: THREE.Vector3,
+    camera: THREE.Camera,
   ): void {
     const seen = new Set<string>();
+    const orthographic = camera instanceof THREE.OrthographicCamera;
+    const fovRadians = ((camera as THREE.PerspectiveCamera).fov ?? 50) * (Math.PI / 180);
+    const orthoHeight = orthographic
+      ? ((camera as THREE.OrthographicCamera).top - (camera as THREE.OrthographicCamera).bottom)
+      : 0;
     for (const contact of contacts) {
       seen.add(contact.id);
-      let mesh = this.meshes.get(contact.id);
-      if (!mesh) {
-        mesh = this.createContactMesh(contact.kind);
-        this.meshes.set(contact.id, mesh);
-        this.scene.add(mesh);
+      let visual = this.visuals.get(contact.id);
+      if (!visual) {
+        visual = this.createVisual(contact.id, contact.kind);
+        this.visuals.set(contact.id, visual);
       }
-      mesh.visible = visible && contact.active;
-      if (mesh.visible) {
-        toRenderPositionInto(contact.position as never, scratch);
-        mesh.position.copy(scratch);
-        if (contact.kind !== "biological" && contact.kind !== "decoy") {
-          mesh.rotation.set(0, -contact.heading, 0);
-        }
+      const shown = visible && contact.active;
+      visual.group.visible = shown;
+      visual.marker.visible = shown;
+      visual.label.visible = shown;
+      visual.trail.line.visible = visible;
+      if (!shown) continue;
+      toRenderPositionInto(contact.position as never, scratch);
+      visual.group.position.copy(scratch);
+      visual.marker.position.copy(scratch);
+      visual.label.position.copy(scratch);
+      if (contact.kind !== "biological" && contact.kind !== "decoy") {
+        visual.group.rotation.set(0, -contact.heading, 0);
       }
+      // Fixed screen footprint: scale the HUD sprites by the world height
+      // visible at the contact's distance, so diamonds stay ~constant pixels
+      // whether the camera is 200 m or 12 km away.
+      const worldHeight = orthographic
+        ? Math.max(1, orthoHeight)
+        : Math.max(
+            1,
+            2 * camera.position.distanceTo(scratch) * Math.tan(fovRadians / 2),
+          );
+      const markerSize = worldHeight * 0.03;
+      visual.marker.scale.set(markerSize, markerSize, 1);
+      const labelWidth = worldHeight * 0.12;
+      visual.label.scale.set(labelWidth, labelWidth * 0.25, 1);
     }
-    for (const [id, mesh] of this.meshes) {
-      if (!seen.has(id)) mesh.visible = false;
+    for (const [id, visual] of this.visuals) {
+      if (!seen.has(id)) {
+        visual.group.visible = false;
+        visual.marker.visible = false;
+        visual.label.visible = false;
+        visual.trail.line.visible = false;
+      }
     }
   }
 
-  dispose(): void {
-    for (const mesh of this.meshes.values()) {
-      disposeObject(mesh);
-      this.scene.remove(mesh);
+  /** Pushes one truth sample per new snapshot; call with the latest frame. */
+  pushTrailPoints(
+    contacts: readonly {
+      id: string;
+      active: boolean;
+      position: { x: number; y: number; z: number };
+    }[],
+    scratch: THREE.Vector3,
+  ): void {
+    for (const contact of contacts) {
+      if (!contact.active) continue;
+      const visual = this.visuals.get(contact.id);
+      if (!visual) continue;
+      toRenderPositionInto(contact.position as never, scratch);
+      visual.trail.push(scratch.x, scratch.y, scratch.z);
     }
-    this.meshes.clear();
+  }
+
+  clearTrails(): void {
+    for (const visual of this.visuals.values()) visual.trail.clear();
+  }
+
+  dispose(): void {
+    for (const visual of this.visuals.values()) {
+      disposeObject(visual.group);
+      visual.marker.material.dispose();
+      const labelMaterial = visual.label.material;
+      labelMaterial.map?.dispose();
+      labelMaterial.dispose();
+      visual.trail.dispose();
+      this.scene.remove(
+        visual.group,
+        visual.marker,
+        visual.label,
+        visual.trail.line,
+      );
+    }
+    this.visuals.clear();
   }
 }
 
@@ -404,6 +558,7 @@ export class SimulationScene {
   );
   private environment: THREE.Group;
   private readonly contactMeshes: ContactMeshPool;
+  private readonly torpedoMarker: THREE.Sprite;
   private readonly torpedoTrail: Trail;
   private readonly targetTrail: Trail;
   private readonly estimateTrail: Trail;
@@ -485,6 +640,13 @@ export class SimulationScene {
     this.orbitControls.enabled = false;
     this.orbitCamera.position.set(-900, 700, -900);
     this.orbitControls.target.set(0, -40, 0);
+    // The shared perspective camera also starts on the environment so the
+    // frames before the first snapshot show the water column instead of a
+    // void from inside the origin.
+    this.perspective.position.set(-900, 700, -900);
+    this.perspective.lookAt(0, -40, 0);
+    this.torpedoMarker = createMarkerSprite(0x7cf7df);
+    this.scene.add(this.torpedoMarker);
     this.renderer.domElement.addEventListener("dblclick", () => {
       if (this.options.cameraMode === "orbit") this.focusOrbit();
     });
@@ -545,6 +707,7 @@ export class SimulationScene {
       this.torpedoTrail.clear();
       this.targetTrail.clear();
       this.estimateTrail.clear();
+      this.contactMeshes.clearTrails();
       return;
     }
     if (snapshot.sequence === this.lastSequence) return;
@@ -552,6 +715,7 @@ export class SimulationScene {
       this.torpedoTrail.clear();
       this.targetTrail.clear();
       this.estimateTrail.clear();
+      this.contactMeshes.clearTrails();
     }
     this.previous = immediate ? snapshot : (this.current ?? snapshot);
     this.current = snapshot;
@@ -561,6 +725,9 @@ export class SimulationScene {
     this.torpedoTrail.push(scratchFromPosition.x, scratchFromPosition.y, scratchFromPosition.z);
     toRenderPositionInto(snapshot.target.position, scratchToPosition);
     this.targetTrail.push(scratchToPosition.x, scratchToPosition.y, scratchToPosition.z);
+    if (snapshot.contacts) {
+      this.contactMeshes.pushTrailPoints(snapshot.contacts, scratchDesired);
+    }
     if (snapshot.estimate) {
       toRenderHorizontalInto(snapshot.estimate.position, scratchToPosition.y, scratchDesired);
       this.estimateTrail.push(scratchDesired.x, scratchDesired.y, scratchDesired.z);
@@ -571,11 +738,15 @@ export class SimulationScene {
     this.torpedoTrail.clear();
     this.targetTrail.clear();
     this.estimateTrail.clear();
+    this.contactMeshes.clearTrails();
     for (const snapshot of snapshots) {
       toRenderPositionInto(snapshot.torpedo.position, scratchFromPosition);
       this.torpedoTrail.push(scratchFromPosition.x, scratchFromPosition.y, scratchFromPosition.z);
       toRenderPositionInto(snapshot.target.position, scratchToPosition);
       this.targetTrail.push(scratchToPosition.x, scratchToPosition.y, scratchToPosition.z);
+      if (snapshot.contacts) {
+        this.contactMeshes.pushTrailPoints(snapshot.contacts, scratchDesired);
+      }
       if (snapshot.estimate) {
         toRenderHorizontalInto(snapshot.estimate.position, scratchToPosition.y, scratchDesired);
         this.estimateTrail.push(scratchDesired.x, scratchDesired.y, scratchDesired.z);
@@ -798,16 +969,10 @@ export class SimulationScene {
     const truthContacts = this.current.contacts;
     if (truthContacts && truthContacts.length > 0) {
       this.target.visible = false;
-      this.contactMeshes.update(
-        truthContacts,
-        this.options.showTruth,
-        scratchDesired,
-      );
     } else {
       this.target.position.copy(contact.position);
       this.target.quaternion.copy(contact.orientation);
       this.target.visible = this.options.showTruth;
-      this.contactMeshes.update([], false, scratchDesired);
     }
     this.seeker.position.copy(own.position);
     this.seeker.position.y += 0.2;
@@ -852,6 +1017,28 @@ export class SimulationScene {
     this.updateCovariance(this.current);
     this.updateDiagnostics(this.current);
     const camera = this.updateCamera(this.current, own.position, contact.position, own.orientation);
+    this.contactMeshes.update(
+      truthContacts ?? [],
+      this.options.showTruth,
+      scratchDesired,
+      camera,
+    );
+    this.updateTorpedoMarker(camera, own.position);
     this.renderer.render(this.scene, camera);
+  }
+
+  private updateTorpedoMarker(camera: THREE.Camera, position: THREE.Vector3): void {
+    this.torpedoMarker.position.copy(position);
+    const worldHeight =
+      camera instanceof THREE.OrthographicCamera
+        ? Math.max(1, camera.top - camera.bottom)
+        : Math.max(
+            1,
+            2 *
+              camera.position.distanceTo(position) *
+              Math.tan((((camera as THREE.PerspectiveCamera).fov ?? 50) * Math.PI) / 360),
+          );
+    const size = worldHeight * 0.03;
+    this.torpedoMarker.scale.set(size, size, 1);
   }
 }

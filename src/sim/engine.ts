@@ -16,7 +16,8 @@ import {
 } from "./homing";
 import {
   fuzeArmedAt,
-  fuzeTriggers,
+  initialFuzeState,
+  updateProximityFuze,
   syntheticEffectiveness,
   updateFuzeArming,
   type FuzeState,
@@ -133,6 +134,7 @@ export class SimulationEngine {
     noise: SeededRandom;
     dropout: SeededRandom;
     channel: SeededRandom;
+    depth: SeededRandom | null;
     perception: SeededRandom | null;
   }[] = [];
   private tracker: MultiTargetTracker | null = null;
@@ -146,6 +148,11 @@ export class SimulationEngine {
   // two of them pass near the estimate.
   private pairedDesignatedTrackId: number | null = null;
   private pairedContactId: string | null = null;
+  // Last measurement-derived depth target (m down). Latched so a momentary
+  // designation drop during track loss does not snap the weapon back to its
+  // launch depth — which would put it back above the layer and strand the
+  // reacquisition search in the refraction shadow.
+  private heldDepthTarget: number | null = null;
 
   constructor(readonly config: SimulationConfig) {
     validateConfig(config);
@@ -195,6 +202,9 @@ export class SimulationEngine {
         noise: new SeededRandom(deriveSeed(config.seed, `contact-noise-${spec.id}`)),
         dropout: new SeededRandom(deriveSeed(config.seed, `contact-dropout-${spec.id}`)),
         channel: new SeededRandom(deriveSeed(config.seed, `contact-channel-${spec.id}`)),
+        depth: config.sensor.depthSigmaM !== undefined
+          ? new SeededRandom(deriveSeed(config.seed, `contact-depth-${spec.id}`))
+          : null,
         perception: spec.perception
           ? new SeededRandom(deriveSeed(config.seed, `contact-perception-${spec.id}`))
           : null,
@@ -221,7 +231,7 @@ export class SimulationEngine {
       this.weapon = config.weapon;
       this.energyRemainingWs = config.weapon.endurance?.battery?.capacityWs ?? null;
       this.homing = initialHomingState();
-      this.fuzeState = { armed: false };
+      this.fuzeState = initialFuzeState();
       this.fuzeArmAt = fuzeArmedAt(config.weapon);
       this.fuzeRandom = (config.weapon.fuze?.jitter ?? 0) > 0
         ? new SeededRandom(deriveSeed(config.seed, "fuze"))
@@ -309,6 +319,7 @@ export class SimulationEngine {
         trackId: track.meta.id,
         estimate: track.estimate,
         quality: track.meta.quality,
+        depth: track.meta.depth,
         classification: this.classifier.update(
           track.meta.id,
           this.timestamp,
@@ -338,7 +349,13 @@ export class SimulationEngine {
           estimate,
           features,
         );
-        return { trackId, estimate, quality: "confirmed", classification };
+        return {
+          trackId,
+          estimate,
+          quality: "confirmed",
+          depth: runtime.state.depth,
+          classification,
+        };
       });
   }
 
@@ -636,6 +653,39 @@ export class SimulationEngine {
     return cruise;
   }
 
+  /**
+   * Depth target for the weapon. In a multi-contact engagement the weapon
+   * follows the designated track's measured depth — descending with a diving
+   * contact instead of losing it across the sound layer — and while holding
+   * fire shadows the same candidate the standoff orbit tracks. Depth comes
+   * from depression-angle measurements only, never truth. The legacy
+   * single-target path keeps the configured commanded depth exactly.
+   */
+  private commandedDepthForPhase(): number {
+    if (!this.contactRuntimes) return this.config.torpedo.commandedDepth;
+    let depth: number | null = null;
+    const designatedId = this.tewa.designation?.trackId ?? null;
+    if (designatedId !== null) {
+      depth =
+        this.lastCandidates.find((entry) => entry.trackId === designatedId)
+          ?.depth ?? null;
+      if (depth === null && this.tracker) {
+        depth = this.tracker.depthForTrack(designatedId);
+      }
+    }
+    if (depth === null && !this.tewa.authorized) {
+      const candidate =
+        this.lastCandidates.find(
+          (entry) => entry.classification.best === "sub-like",
+        ) ?? this.lastCandidates[0];
+      depth = candidate?.depth ?? null;
+    }
+    if (depth !== null) this.heldDepthTarget = depth;
+    const target = this.heldDepthTarget ?? this.config.torpedo.commandedDepth;
+    const waterDepth = this.config.environment?.waterDepth ?? 500;
+    return clamp(target, 5, waterDepth - 20);
+  }
+
   private updateAutopilot(): void {
     const rawYawRate =
       this.guidance.lateralAcceleration / Math.max(1, this.torpedo.speed);
@@ -643,7 +693,7 @@ export class SimulationEngine {
     this.torpedoControl = {
       yawRateCommand: clamp(rawYawRate, -maximum, maximum),
       depthRateCommand: depthRateAutopilot(
-        this.config.torpedo.commandedDepth,
+        this.commandedDepthForPhase(),
         this.torpedo,
         this.config.torpedo.parameters,
       ),
@@ -678,6 +728,7 @@ export class SimulationEngine {
           noise: new SeededRandom(0),
           dropout: new SeededRandom(0),
           channel: new SeededRandom(0),
+          depth: null,
         },
       );
       if (samples) {
@@ -1107,14 +1158,22 @@ export class SimulationEngine {
     ];
     const nearest = this.nearestActiveContact();
     const proximityRange = nearest ? nearest.separation : sample.metrics.range;
-    const fuzed =
+    let fuzeSeparation: number | null = null;
+    if (
       this.weapon?.fuze !== undefined &&
-      this.fuzeState?.armed === true &&
-      fuzeTriggers(
+      this.fuzeState?.armed === true
+    ) {
+      const update = updateProximityFuze(
+        this.fuzeState,
         proximityRange,
         this.weapon.fuze,
         this.fuzeRandom ?? undefined,
       );
+      this.fuzeState = update.state;
+      if (update.detonate) {
+        fuzeSeparation = update.detonationSeparation ?? proximityRange;
+      }
+    }
     const exhausted =
       (this.weapon?.endurance?.battery !== undefined &&
         this.energyRemainingWs !== null &&
@@ -1125,13 +1184,16 @@ export class SimulationEngine {
     // Multi-contact termination uses the nearest true contact (proximity
     // scoring, like the fuze); legacy keeps the designated single target.
     if (!isFiniteArray(stateValues)) this.finish("invalid-state", sample);
-    else if (fuzed) {
-      this.finish("fuzed-detonation", sample, proximityRange);
+    else if (fuzeSeparation !== null) {
+      this.finish("fuzed-detonation", sample, fuzeSeparation);
     }
     else if (exhausted && this.timestamp < this.config.runtime.maxTime) {
       this.finish("endurance-exhausted", sample);
     }
-    else if (proximityRange <= this.config.interceptRadius) {
+    else if (
+      this.weapon?.fuze === undefined &&
+      proximityRange <= this.config.interceptRadius
+    ) {
       this.finish("intercept", sample);
     } else if (this.timestamp >= this.config.runtime.maxTime) {
       this.finish("timeout", sample);
