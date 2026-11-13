@@ -174,6 +174,24 @@ export class ContactClassifier {
       if (tsSigma !== null && tsSigma > 3) {
         likelihood -= Math.min(1, (tsSigma - 3) / 6);
       }
+      // Passive radiated noise: an independent, non-echo axis. A contact
+      // this loud is surface machinery or a vocal biological, never a
+      // quiet boat; moderate broadband fits a moving vessel; near-silence
+      // at speed fits a mute decoy more than a real submarine.
+      if (features.passiveSnrDb !== null) {
+        const passive = features.passiveSnrDb;
+        if (passive > 30) {
+          if (cls === "surface-commercial") likelihood += 1.5;
+          else if (cls === "biological") likelihood += 0.5;
+          else likelihood -= 0.8;
+        } else if (passive > 5) {
+          if (cls === "sub-like" || cls === "friendly-sub") likelihood += 0.6;
+          else if (cls === "biological") likelihood += 0.4;
+        } else if (passive < 0) {
+          if (cls === "decoy") likelihood += 0.8;
+          else if (cls === "sub-like") likelihood -= 0.3;
+        }
+      }
       state.evidence[cls] =
         state.evidence[cls] * (1 - LEARNING_RATE) + likelihood * LEARNING_RATE;
     }

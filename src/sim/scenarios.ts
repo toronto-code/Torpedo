@@ -99,6 +99,9 @@ export function createAmbiguityScenarioConfig(
     kind: "hostile-sub",
     vehicle: hostileVehicle,
     aspectEcho: { bowDb: 8, beamDb: 19 },
+    // Quiet nuclear-ish plant: audible on passive at close range, faint
+    // once the weapon sprints (self-noise deafens the passive band).
+    radiatedNoiseDb: 132,
     behavior: { kind: "scripted-evasive", triggerRange: 700, rate: -0.05 },
     // Truth-side threat perception: hears the weapon's pings, then evades
     // and dives below the layer — shielding itself acoustically both ways.
@@ -132,6 +135,7 @@ export function createAmbiguityScenarioConfig(
           kind: "friendly-sub",
           vehicle: vehicle(1600, -700, Math.PI, 5, 25),
           aspectEcho: { bowDb: 7, beamDb: 17 },
+          radiatedNoiseDb: 135,
           behavior: { kind: "constant-velocity" },
           friendlySignature: 0.9,
         },
@@ -148,6 +152,7 @@ export function createAmbiguityScenarioConfig(
           kind: "commercial-surface",
           vehicle: vehicle(600, -1500, 1.2, 12, 0.5),
           targetStrengthDb: 22,
+          radiatedNoiseDb: 165,
           behavior: { kind: "constant-velocity" },
         },
         {
@@ -155,6 +160,7 @@ export function createAmbiguityScenarioConfig(
           kind: "biological",
           vehicle: vehicle(900, 900, 2.4, 1.6, 4),
           targetStrengthDb: -8,
+          radiatedNoiseDb: 148,
           behavior: { kind: "biologic-wander", amplitude: 0.8, period: 35 },
         },
         {
@@ -162,6 +168,7 @@ export function createAmbiguityScenarioConfig(
           kind: "biological",
           vehicle: vehicle(1400, 1100, -2.2, 1.3, 6),
           targetStrengthDb: -9,
+          radiatedNoiseDb: 146,
           behavior: { kind: "biologic-wander", amplitude: 0.6, period: 45 },
         },
       ];
@@ -176,6 +183,7 @@ export function createAmbiguityScenarioConfig(
           kind: "decoy",
           vehicle: vehicle(2000, 650, Math.PI - 0.35, 4, 30),
           targetStrengthDb: 21,
+          radiatedNoiseDb: 112,
           behavior: { kind: "decoy", triggerRange: 650, deploySpeed: 4, headingOffset: 0.5 },
           deployedBy: "hostile",
         },
@@ -193,6 +201,7 @@ export function createAmbiguityScenarioConfig(
           vehicle: vehicle(1700, 200, Math.PI - 0.2, 4, 20),
           targetStrengthDb: 9,
           echoFluctuation: { amplitudeDb: 9, period: 12 },
+          radiatedNoiseDb: 128,
           behavior: { kind: "constant-velocity" },
         },
       ];
@@ -208,6 +217,7 @@ export function createAmbiguityScenarioConfig(
           kind: "friendly-sub",
           vehicle: vehicle(1600, -700, Math.PI, 5, 25),
           aspectEcho: { bowDb: 7, beamDb: 17 },
+          radiatedNoiseDb: 135,
           behavior: { kind: "constant-velocity" },
           friendlySignature: 0.9,
         },
@@ -216,6 +226,7 @@ export function createAmbiguityScenarioConfig(
           kind: "biological",
           vehicle: vehicle(900, 900, 2.4, 1.6, 4),
           targetStrengthDb: -8,
+          radiatedNoiseDb: 148,
           behavior: { kind: "biologic-wander", amplitude: 0.8, period: 35 },
         },
         {
@@ -223,6 +234,7 @@ export function createAmbiguityScenarioConfig(
           kind: "commercial-surface",
           vehicle: vehicle(600, -1500, 1.2, 12, 0.5),
           targetStrengthDb: 22,
+          radiatedNoiseDb: 165,
           behavior: { kind: "constant-velocity" },
         },
         {
@@ -231,6 +243,7 @@ export function createAmbiguityScenarioConfig(
           vehicle: vehicle(1700, 200, Math.PI - 0.2, 4, 20),
           targetStrengthDb: 9,
           echoFluctuation: { amplitudeDb: 9, period: 12 },
+          radiatedNoiseDb: 128,
           behavior: { kind: "constant-velocity" },
         },
         {
@@ -238,6 +251,7 @@ export function createAmbiguityScenarioConfig(
           kind: "decoy",
           vehicle: vehicle(2000, 650, Math.PI - 0.35, 4, 30),
           targetStrengthDb: 21,
+          radiatedNoiseDb: 112,
           behavior: { kind: "decoy", triggerRange: 650, deploySpeed: 4, headingOffset: 0.5 },
           deployedBy: "hostile",
         },

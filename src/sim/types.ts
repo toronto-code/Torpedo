@@ -52,6 +52,10 @@ export interface ContactSpec {
   vehicle: VehicleConfig;
   /** Per-contact acoustic target strength (dB) for the link budget. */
   targetStrengthDb?: number;
+  /** Synthetic broadband radiated-noise level (dB re 1 µPa @ 1 m) heard by
+   *  a passive listener. Absent keeps the contact passive-silent (no
+   *  passive feature is measured). */
+  radiatedNoiseDb?: number;
   /** Deterministic echo-strength fluctuation (dB) for ambiguous contacts. */
   echoFluctuation?: { amplitudeDb: number; period: number };
   /** Aspect-dependent echo: TS = bow + (beam - bow) * sin^2(aspect), where
@@ -477,6 +481,10 @@ export interface SensorObservation {
    *  only by depth steering, never by the horizontal estimator. Absent on
    *  the legacy single-return path. */
   targetDepth?: number;
+  /** Passive radiated-noise SNR (dB) at the weapon's receiver. A
+   *  measurement feature for classification; independent of the active
+   *  echo path. */
+  passiveSnrDb?: number;
 }
 
 export interface TrackEstimate {

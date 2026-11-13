@@ -9,6 +9,7 @@ import {
   initialFuzeState,
   updateProximityFuze,
 } from "../src/sim/fuze";
+import { ContactClassifier } from "../src/sim/classify";
 import type { SensorObservation, VehicleState } from "../src/sim/types";
 
 const vehicleAt = (
@@ -184,5 +185,128 @@ describe("weapon dives with a designated deep contact", () => {
     expect(second.terminationReason).toEqual(first.terminationReason);
     expect(second.fuzeMissDistance).toEqual(first.fuzeMissDistance);
     expect(second.engagedContact).toEqual(first.engagedContact);
+  });
+});
+
+
+function trackEstimate(overrides: {
+  position?: { x: number; y: number };
+  velocity?: { x: number; y: number };
+}) {
+  return {
+    timestamp: 0,
+    position: overrides.position ?? { x: 1000, y: 0 },
+    velocity: overrides.velocity ?? { x: -5, y: 0 },
+    covariance: [
+      [50, 0, 0, 0],
+      [0, 50, 0, 0],
+      [0, 0, 10, 0],
+      [0, 0, 0, 10],
+    ],
+    age: 0.1,
+    valid: true,
+    source: "ekf" as const,
+  };
+}
+
+describe("passive radiated-noise feature", () => {
+  it("measures passive SNR only for radiating contacts, never on the legacy path", () => {
+    const config = createDefaultConfig();
+    config.sensor.depthSigmaM = 4;
+    config.sensor.dropoutProbability = 0;
+    const seeker = new SeekerModel(
+      config.sensor,
+      new SeededRandom(11),
+      new SeededRandom(12),
+      {
+        temperatureC: 12,
+        salinityPsu: 35,
+        waterDepth: 400,
+        spreadingCoefficient: 17,
+      },
+      {
+        enabled: true,
+        frequencyKhz: 8,
+        sourceLevelDb: 210,
+        targetStrengthDb: 10,
+        ambientNoiseDb: 60,
+        receiverDirectivityIndexDb: 15,
+        detectionThresholdDb: 6,
+        detectionTransitionDb: 3,
+      },
+    );
+    const sensor = vehicleAt(0, 0, 8);
+    const contact = vehicleAt(1200, 0, 40);
+    const streams = [
+      {
+        noise: new SeededRandom(1),
+        dropout: new SeededRandom(2),
+        channel: new SeededRandom(3),
+        depth: new SeededRandom(4),
+      },
+    ];
+    const samples = seeker.sampleContacts(
+      0,
+      sensor,
+      [{ state: contact, targetStrengthDb: 14, radiatedNoiseDb: 165 }],
+      streams,
+      { noise: new SeededRandom(0), dropout: new SeededRandom(0), channel: new SeededRandom(0) },
+    )!;
+    const loud = samples[0].observation?.passiveSnrDb;
+    expect(loud).toBeDefined();
+    expect(loud!).toBeGreaterThan(30);
+
+    const quiet = seeker.sampleContacts(
+      0.125,
+      sensor,
+      [{ state: contact, targetStrengthDb: 14, radiatedNoiseDb: 100 }],
+      streams,
+      { noise: new SeededRandom(0), dropout: new SeededRandom(0), channel: new SeededRandom(0) },
+    );
+    const quietSnr = quiet![0].observation?.passiveSnrDb;
+    expect(quietSnr).toBeDefined();
+    expect(quietSnr!).toBeLessThan(0);
+
+    const silent = seeker.sampleContacts(
+      0.25,
+      sensor,
+      [{ state: contact, targetStrengthDb: 14 }],
+      streams,
+      { noise: new SeededRandom(0), dropout: new SeededRandom(0), channel: new SeededRandom(0) },
+    );
+    expect(silent![0].observation?.passiveSnrDb).toBeUndefined();
+  });
+
+  it("biases classification: loud noise favors commercial, silence favors decoy", () => {
+    const classifier = new ContactClassifier();
+    const estimate = trackEstimate({ velocity: { x: 12, y: 0 } });
+    const base = {
+      impliedTargetStrengthDb: 18,
+      impliedTsSigmaDb: null,
+      snrDb: 12,
+      signatureCorrelation: 0.1,
+      depthRateMPerS: null,
+      observationCount: 40,
+    };
+    let loud = classifier.update(1, 0, estimate, { ...base, passiveSnrDb: 45 });
+    for (let index = 1; index <= 30; index += 1) {
+      loud = classifier.update(1, index, estimate, { ...base, passiveSnrDb: 45, observationCount: 40 + index });
+    }
+    let silent = classifier.update(2, 0, estimate, { ...base, passiveSnrDb: -6, impliedTargetStrengthDb: 20 });
+    const slowEstimate = trackEstimate({ velocity: { x: 3.5, y: 0 } });
+    for (let index = 1; index <= 30; index += 1) {
+      silent = classifier.update(2, index, slowEstimate, {
+        ...base,
+        impliedTargetStrengthDb: 20,
+        passiveSnrDb: -6,
+        observationCount: 40 + index,
+      });
+    }
+    expect(loud.probabilities["surface-commercial"]).toBeGreaterThan(
+      loud.probabilities["sub-like"],
+    );
+    expect(silent.probabilities.decoy).toBeGreaterThan(
+      silent.probabilities["sub-like"],
+    );
   });
 });

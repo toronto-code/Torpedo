@@ -24,6 +24,9 @@ export interface SeekerContact {
   targetStrengthDb: number;
   echoFluctuation?: { amplitudeDb: number; period: number };
   friendlySignature?: number;
+  /** Synthetic broadband radiated-noise level (dB); passive-silent when
+   *  absent. */
+  radiatedNoiseDb?: number;
 }
 
 export class SeekerModel {
@@ -122,6 +125,7 @@ export class SeekerModel {
         stream.dropout,
         stream.channel,
         stream.depth,
+        contact.radiatedNoiseDb,
       );
     });
   }
@@ -137,6 +141,7 @@ export class SeekerModel {
     dropout: SeededRandom,
     channelRandom: SeededRandom | undefined,
     depthRandom: SeededRandom | null = null,
+    radiatedNoiseDb?: number,
   ): SensorSample {
     const relative = subtract2(target.position, sensor.position);
     const range = magnitude2(relative);
@@ -227,6 +232,13 @@ export class SeekerModel {
         0,
         target.depth + depthRandom.gaussian(0, this.config.depthSigmaM),
       );
+    }
+    if (radiatedNoiseDb !== undefined && channel) {
+      // Passive rider: broadband radiated noise on the same one-way path,
+      // heard against the (self-noise-degraded) ambient. Sprinting blinds
+      // the passive band exactly as it degrades the active one.
+      observation.passiveSnrDb =
+        radiatedNoiseDb - channel.oneWayTransmissionLossDb - ambientDb;
     }
     return { status: "locked", observation, acoustic: channel };
   }

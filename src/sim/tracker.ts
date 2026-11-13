@@ -23,6 +23,8 @@ export interface TrackFeatures {
   signatureCorrelation: number | null;
   /** Smoothed |depth rate| from depression-angle measurements (m/s). */
   depthRateMPerS: number | null;
+  /** Smoothed passive radiated-noise SNR (dB); null when passive-silent. */
+  passiveSnrDb: number | null;
   observationCount: number;
 }
 
@@ -217,6 +219,7 @@ export class MultiTargetTracker {
           snrDb: null,
           signatureCorrelation: null,
           depthRateMPerS: null,
+          passiveSnrDb: null,
           observationCount: 0,
         },
         depth: null,
@@ -284,6 +287,13 @@ export class MultiTargetTracker {
       }
       track.lastDepthAt = observation.observedAt;
       track.lastDepthValue = observation.targetDepth;
+    }
+    if (observation.passiveSnrDb !== undefined) {
+      features.passiveSnrDb =
+        features.passiveSnrDb === null
+          ? observation.passiveSnrDb
+          : features.passiveSnrDb +
+            0.3 * (observation.passiveSnrDb - features.passiveSnrDb);
     }
   }
 

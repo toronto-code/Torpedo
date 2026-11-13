@@ -199,6 +199,7 @@ export function TelemetryPanel({ snapshot, config, events, eventDuration }: Prop
         <Evidence label="ONE-WAY TL">{acoustic ? `${acoustic.oneWayTransmissionLossDb.toFixed(2)} dB` : "—"}</Evidence>
         <Evidence label="RECEIVED ECHO">{acoustic ? `${acoustic.receivedEchoLevelDb.toFixed(2)} dB` : "—"}</Evidence>
         <Evidence label="CHANNEL SNR">{acoustic ? `${acoustic.signalToNoiseDb.toFixed(2)} dB` : "—"}</Evidence>
+        <Evidence label="PASSIVE SNR">{observation?.passiveSnrDb !== undefined && observation?.passiveSnrDb !== null ? `${observation.passiveSnrDb.toFixed(2)} dB` : "—"}</Evidence>
         <Evidence label="DETECTION PROBABILITY">{acoustic ? `${(acoustic.detectionProbability * 100).toFixed(1)}%` : "—"}</Evidence>
         <Evidence label="TWO-WAY PROPAGATION">{acoustic ? `${(acoustic.propagationDelay * 1000).toFixed(1)} ms` : "—"}</Evidence>
         <Evidence label="INPUT BUS">WORKER-SYNTHETIC / NO I/O</Evidence>

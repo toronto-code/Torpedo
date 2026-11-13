@@ -32,6 +32,7 @@ function trackFeatures(overrides: Partial<TrackFeatures> = {}): TrackFeatures {
     snrDb: 10,
     signatureCorrelation: 0.1,
     depthRateMPerS: null,
+    passiveSnrDb: null,
     observationCount: 1,
     ...overrides,
   };

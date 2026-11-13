@@ -1,3 +1,4 @@
+import { thorpAbsorptionDbPerKm } from "./acoustics";
 import { hashConfig, validateConfig } from "./config";
 import {
   depthRateAutopilot,
@@ -334,6 +335,32 @@ export class SimulationEngine {
       .map((runtime, index) => {
         const trackId = -(index + 1);
         const estimate = perfectTrack(runtime.state, this.timestamp);
+        const passiveLevel = runtime.spec.radiatedNoiseDb;
+        const passiveEnvironment = this.config.environment;
+        const passiveAcoustic = this.config.acoustic;
+        const passiveSnrDb =
+          passiveLevel === undefined ||
+          !passiveEnvironment ||
+          !passiveAcoustic?.enabled
+            ? null
+            : passiveLevel -
+              (passiveEnvironment.spreadingCoefficient *
+                Math.log10(
+                  Math.max(
+                    1,
+                    Math.hypot(
+                      runtime.state.position.x - this.torpedo.position.x,
+                      runtime.state.position.y - this.torpedo.position.y,
+                    ),
+                  ),
+                ) +
+                thorpAbsorptionDbPerKm(passiveAcoustic.frequencyKhz) *
+                  Math.hypot(
+                    runtime.state.position.x - this.torpedo.position.x,
+                    runtime.state.position.y - this.torpedo.position.y,
+                  ) /
+                  1000) -
+              passiveAcoustic.ambientNoiseDb;
         const features: TrackFeatures = {
           impliedTargetStrengthDb: effectiveTargetStrength(
             runtime,
@@ -344,6 +371,7 @@ export class SimulationEngine {
           snrDb: null,
           signatureCorrelation: runtime.spec.friendlySignature ?? 0.1,
           depthRateMPerS: Math.abs(runtime.state.depthRate),
+          passiveSnrDb,
           observationCount: 1,
         };
         const classification: TrackClassification = this.classifier.update(
@@ -722,6 +750,7 @@ export class SimulationEngine {
           ),
           echoFluctuation: runtime.spec.echoFluctuation,
           friendlySignature: runtime.spec.friendlySignature,
+          radiatedNoiseDb: runtime.spec.radiatedNoiseDb,
         }));
       const samples = this.seeker.sampleContacts(
         this.timestamp,
