@@ -40,6 +40,12 @@ export interface PerceptionUpdateInput {
   environment?: EnvironmentConfig;
   acoustic?: AcousticConfig;
   random: SeededRandom;
+  /** Substitute signal level for the weapon: a passive-midcourse weapon is
+   *  heard through its radiated machinery/flow noise, not its pings. */
+  overrideSourceLevelDb?: number;
+  /** True when the weapon emits nothing audible (silent policy without a
+   *  radiated-noise model): perception hears nothing at all. */
+  silent?: boolean;
 }
 
 export function updateTargetPerception(
@@ -52,7 +58,9 @@ export function updateTargetPerception(
   const trueBearing = Math.atan2(dy, dx);
 
   let heard = false;
-  if (input.environment && input.acoustic?.enabled) {
+  if (input.silent) {
+    // Nothing to hear.
+  } else if (input.environment && input.acoustic?.enabled) {
     const channel = acousticChannel(
       input.now,
       range,
@@ -61,8 +69,9 @@ export function updateTargetPerception(
       input.environment,
       input.acoustic,
     );
-    const receivedDb =
-      input.acoustic.sourceLevelDb - channel.oneWayTransmissionLossDb;
+    const sourceLevelDb =
+      input.overrideSourceLevelDb ?? input.acoustic.sourceLevelDb;
+    const receivedDb = sourceLevelDb - channel.oneWayTransmissionLossDb;
     const snrDb = receivedDb - input.acoustic.ambientNoiseDb;
     const scale = Math.max(0.01, input.perception.detectionTransitionDb);
     const detectionProbability = 1 / (

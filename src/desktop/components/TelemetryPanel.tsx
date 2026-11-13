@@ -125,6 +125,13 @@ export function TelemetryPanel({ snapshot, config, events, eventDuration }: Prop
               <span>ENDURANCE <strong>{value(snapshot.weapon.enduranceRemaining, 0)} s</strong></span>
             )}
             <span>COMMAND SPEED <strong>{value(snapshot.weapon.commandedSpeed, 1)} m/s</strong></span>
+            {snapshot.weapon.sensorMode !== undefined && (
+              <span>SENSOR <strong>{snapshot.weapon.sensorMode.toUpperCase()}</strong></span>
+            )}
+            {snapshot.weapon.solutionSigmaM !== null &&
+              snapshot.weapon.solutionSigmaM !== undefined && (
+                <span>SOLUTION 2σ <strong>{value(snapshot.weapon.solutionSigmaM, 0)} m</strong></span>
+              )}
             {snapshot.weapon.trackLostFor !== null && snapshot.weapon.trackLostFor > 0.5 && (
               <span>TRACK LOST <strong>{value(snapshot.weapon.trackLostFor, 1)} s</strong></span>
             )}

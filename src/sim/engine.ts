@@ -137,6 +137,7 @@ export class SimulationEngine {
     dropout: SeededRandom;
     channel: SeededRandom;
     depth: SeededRandom | null;
+    passive: SeededRandom;
     perception: SeededRandom | null;
   }[] = [];
   private tracker: MultiTargetTracker | null = null;
@@ -155,6 +156,8 @@ export class SimulationEngine {
   // launch depth — which would put it back above the layer and strand the
   // reacquisition search in the refraction shadow.
   private heldDepthTarget: number | null = null;
+  // True once a passive-midcourse seeker has gone active (terminal entry).
+  private sensorActivated = false;
 
   constructor(readonly config: SimulationConfig) {
     validateConfig(config);
@@ -207,6 +210,7 @@ export class SimulationEngine {
         depth: config.sensor.depthSigmaM !== undefined
           ? new SeededRandom(deriveSeed(config.seed, `contact-depth-${spec.id}`))
           : null,
+        passive: new SeededRandom(deriveSeed(config.seed, `contact-passive-${spec.id}`)),
         perception: spec.perception
           ? new SeededRandom(deriveSeed(config.seed, `contact-perception-${spec.id}`))
           : null,
@@ -525,14 +529,26 @@ export class SimulationEngine {
           const dy = candidate.estimate.position.y - this.torpedo.position.y;
           const bearing = Math.atan2(dy, dx);
           const range = Math.hypot(dx, dy);
-          // Inside the standoff, fly a gentle inward spiral (heading offset
-          // 45 deg off the bearing) so the seeker — a +/-50 deg half-angle
-          // field — keeps the contact group in view instead of pointing the
-          // nose tangent and staring away from the contacts.
-          desiredHeading =
-            range > STANDOFF_RANGE
-              ? bearing
-              : bearing + Math.PI / 4;
+          if (
+            this.weapon?.sensorPolicy === "passive-midcourse" &&
+            !this.sensorActivated
+          ) {
+            // TMA legging: alternate straight legs offset from the bearing
+            // so the passive bearing history becomes observable — the
+            // classic own-ship maneuver that solves bearings-only tracking.
+            const LEG_DURATION = 22;
+            const leg = Math.floor(this.timestamp / LEG_DURATION) % 2 === 0;
+            desiredHeading = bearing + (leg ? 0.9 : -0.9);
+          } else {
+            // Inside the standoff, fly a gentle inward spiral (heading offset
+            // 45 deg off the bearing) so the seeker — a +/-50 deg half-angle
+            // field — keeps the contact group in view instead of pointing the
+            // nose tangent and staring away from the contacts.
+            desiredHeading =
+              range > STANDOFF_RANGE
+                ? bearing
+                : bearing + Math.PI / 4;
+          }
         }
         const headingError = wrapAngle(desiredHeading - this.torpedo.heading);
         const lateralAcceleration = Math.min(
@@ -625,6 +641,17 @@ export class SimulationEngine {
         }
       }
       if (update.transition.phase === "terminal") {
+        if (
+          this.weapon.sensorPolicy === "passive-midcourse" &&
+          !this.sensorActivated
+        ) {
+          this.sensorActivated = true;
+          this.phaseTimeline.push({
+            phase: "terminal",
+            startedAt: this.timestamp,
+            reason: "seeker activated (passive midcourse ended)",
+          });
+        }
         const cadenceHz = this.weapon.terminalSensor?.cadenceHz;
         if (cadenceHz !== undefined) {
           this.seeker.setCadence(cadenceHz, this.timestamp);
@@ -698,8 +725,15 @@ export class SimulationEngine {
       return this.weapon.speed.sprintSpeed;
     }
     // Search slow, kill fast: cutting speed during reacquisition lowers
-    // flow self-noise and widens the effective detection cone.
-    if (this.homing?.phase === "reacquisition" && this.weapon.speed?.searchSpeed !== undefined) {
+    // flow self-noise and widens the effective detection cone. A silent
+    // passive midcourse searches at the quiet speed for the same reason —
+    // and to stay below the target's counter-detection threshold.
+    if (
+      this.weapon.speed?.searchSpeed !== undefined &&
+      ((this.homing?.phase === "reacquisition") ||
+        (this.weapon.sensorPolicy === "passive-midcourse" &&
+          !this.sensorActivated))
+    ) {
       return this.weapon.speed.searchSpeed;
     }
     return cruise;
@@ -755,6 +789,41 @@ export class SimulationEngine {
 
   private sampleAndDeliverObservations(): void {
     if (this.contactRuntimes) {
+      // Silent midcourse: listen instead of ping. The weapon builds a
+      // bearing-only picture (and stays acoustically invisible to
+      // perception) until the terminal-phase activation.
+      if (
+        this.weapon?.sensorPolicy === "passive-midcourse" &&
+        !this.sensorActivated
+      ) {
+        const radiating = this.contactRuntimes
+          .filter((runtime) => runtime.active)
+          .map((runtime) => ({
+            state: runtime.state,
+            targetStrengthDb: 0,
+            radiatedNoiseDb: runtime.spec.radiatedNoiseDb,
+          }));
+        const samples = this.seeker.samplePassive(
+          this.timestamp,
+          this.torpedo,
+          radiating,
+          this.contactStreams,
+          { noise: new SeededRandom(0), passive: new SeededRandom(0) },
+        );
+        if (samples) {
+          this.lastPingAt = this.timestamp;
+          const locked = samples.find((sample) => sample.status === "locked");
+          this.seekerStatus = locked ? "locked" : "searching";
+          this.latestAcoustic = locked?.acoustic ?? null;
+          for (const sample of samples) {
+            if (sample.observation) {
+              this.pendingObservations.push(sample.observation);
+            }
+          }
+        }
+        this.deliverPendingObservations();
+        return;
+      }
       const weaponPosition = {
         x: this.torpedo.position.x,
         y: this.torpedo.position.y,
@@ -866,6 +935,18 @@ export class SimulationEngine {
             : null,
       armed: this.fuzeState?.armed ?? false,
       commandedSpeed: this.torpedoControl.speedCommand,
+      sensorMode:
+        this.weapon.sensorPolicy === "passive-midcourse" && !this.sensorActivated
+          ? "passive"
+          : "active",
+      solutionSigmaM: (() => {
+        const track = this.selectedTrack();
+        if (!track) return null;
+        const variance =
+          Math.max(0, track.covariance[0]?.[0] ?? 0) +
+          Math.max(0, track.covariance[1]?.[1] ?? 0);
+        return 2 * Math.sqrt(variance);
+      })(),
       enablePoint: this.enablePointAbsolute,
       interceptPoint: this.interceptPointAbsolute,
     };
@@ -1036,6 +1117,16 @@ export class SimulationEngine {
           environment: this.config.environment,
           acoustic: this.config.acoustic,
           random: this.contactStreams[index].perception!,
+          ...(this.weapon?.sensorPolicy === "passive-midcourse" &&
+          !this.sensorActivated
+            ? this.weapon.radiatedNoise
+              ? {
+                  overrideSourceLevelDb:
+                    this.weapon.radiatedNoise.baseDb +
+                    this.weapon.radiatedNoise.dbPerMs * this.torpedo.speed,
+                }
+              : { silent: true }
+            : {}),
         });
       }
     }
@@ -1221,7 +1312,8 @@ export class SimulationEngine {
     let fuzeSeparation: number | null = null;
     if (
       this.weapon?.fuze !== undefined &&
-      this.fuzeState?.armed === true
+      this.fuzeState?.armed === true &&
+      this.engagementAuthorized
     ) {
       const update = updateProximityFuze(
         this.fuzeState,

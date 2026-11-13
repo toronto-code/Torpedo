@@ -195,6 +195,17 @@ export function updateTewa(input: TewaUpdateInput): TewaState {
       x: designated.estimate.position.x - input.ownPosition.x,
       y: designated.estimate.position.y - input.ownPosition.y,
     });
+    const solutionSigma =
+      input.doctrine.maxSolutionSigmaM === undefined
+        ? null
+        : 2 *
+          Math.sqrt(
+            Math.max(
+              0,
+              (designated.estimate.covariance[0]?.[0] ?? 0) +
+                (designated.estimate.covariance[1]?.[1] ?? 0),
+            ),
+          );
     satisfied =
       designated.classification.confidence >=
         input.doctrine.requiredConfidence &&
@@ -204,7 +215,10 @@ export function updateTewa(input: TewaUpdateInput): TewaState {
       (input.doctrine.engagementMaxRange === undefined ||
         range <= input.doctrine.engagementMaxRange) &&
       (input.doctrine.minTrackAgeS === undefined ||
-        input.now - designated.createdAt >= input.doctrine.minTrackAgeS);
+        input.now - designated.createdAt >= input.doctrine.minTrackAgeS) &&
+      (solutionSigma === null ||
+        input.doctrine.maxSolutionSigmaM === undefined ||
+        solutionSigma <= input.doctrine.maxSolutionSigmaM);
   }
 
   if (!state.authorized) {

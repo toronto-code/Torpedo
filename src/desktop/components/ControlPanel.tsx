@@ -121,6 +121,7 @@ export function ControlPanel(props: Props) {
           <option value="cluttered-approach">Cluttered approach · classification</option>
           <option value="decoy-stress">Decoy stress · seduction</option>
           <option value="ambiguous-fluctuator">Ambiguous fluctuator · confidence</option>
+          <option value="silent-approach">Silent approach · bearings-only TMA (experimental)</option>
           <option value="high-ambiguity">High ambiguity · combined</option>
         </select>
 

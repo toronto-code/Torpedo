@@ -130,6 +130,95 @@ export class SeekerModel {
     });
   }
 
+  /**
+   * Silent listening pass: omnidirectional bearing-only detections of
+   * radiating contacts on the same cadence clock as the active pings. A
+   * passive hearing carries a nominal-range prior with a huge variance —
+   * range stays unobservable until own-ship geometry diversifies. The
+   * active draw sequence is never touched.
+   */
+  samplePassive(
+    timestamp: number,
+    sensor: VehicleState,
+    contacts: readonly SeekerContact[],
+    streams: {
+      noise: SeededRandom;
+      passive: SeededRandom;
+    }[],
+    fallbackStreams: { noise: SeededRandom; passive: SeededRandom },
+  ): SensorSample[] | null {
+    if (timestamp + 1e-10 < this.nextSampleTime) return null;
+    this.nextSampleTime += 1 / this.cadenceHz;
+    let ambientDb = this.acoustic?.ambientNoiseDb ?? 0;
+    const selfNoise = this.config.selfNoise;
+    if (this.acoustic && selfNoise) {
+      const selfDb = selfNoise.baseDb + selfNoise.dbPerMs * sensor.speed;
+      ambientDb =
+        10 * Math.log10(10 ** (this.acoustic.ambientNoiseDb / 10) + 10 ** (selfDb / 10));
+    }
+    return contacts.map((contact, index) => {
+      const stream = streams[index] ?? fallbackStreams;
+      if (contact.radiatedNoiseDb === undefined) {
+        return { status: "searching", observation: null, acoustic: null };
+      }
+      const dx = contact.state.position.x - sensor.position.x;
+      const dy = contact.state.position.y - sensor.position.y;
+      const range = Math.max(1, Math.hypot(dx, dy));
+      if (range > this.config.maxRange) {
+        return { status: "out-of-range", observation: null, acoustic: null };
+      }
+      const bearingOnlyChannel =
+        this.environment && this.acoustic?.enabled
+          ? acousticChannel(
+              timestamp,
+              range,
+              sensor.depth,
+              contact.state.depth,
+              this.environment,
+              { ...this.acoustic!, ambientNoiseDb: ambientDb },
+            )
+          : null;
+      if (!bearingOnlyChannel || !this.acoustic) {
+        return { status: "searching", observation: null, acoustic: null };
+      }
+      const snrDb =
+        contact.radiatedNoiseDb -
+        bearingOnlyChannel.oneWayTransmissionLossDb -
+        ambientDb;
+      const scale = Math.max(0.01, this.acoustic.detectionTransitionDb);
+      const detectionProbability = 1 / (
+        1 + Math.exp(-(snrDb - this.acoustic.detectionThresholdDb) / scale)
+      );
+      if (stream.passive.next() > detectionProbability) {
+        return { status: "searching", observation: null, acoustic: bearingOnlyChannel };
+      }
+      const trueBearing = wrapAngle(Math.atan2(dy, dx) - sensor.heading);
+      // Passive bearing resolution is slightly worse than the active
+      // tracker's; the nominal range prior is deliberately loose.
+      const nominalRange = Math.min(this.config.maxRange, 2200);
+      const observation: SensorObservation = {
+        id: this.observationId++,
+        observedAt: timestamp,
+        deliveredAt:
+          timestamp +
+          this.config.latency +
+          bearingOnlyChannel.propagationDelay / 2,
+        bearing: wrapAngle(
+          trueBearing + stream.noise.gaussian(0, this.config.bearingSigma * 1.2),
+        ),
+        range: nominalRange,
+        bearingVariance: (this.config.bearingSigma * 1.2) ** 2,
+        rangeVariance: 1400 ** 2,
+        bearingOnly: true,
+        sensorPosition: { x: sensor.position.x, y: sensor.position.y },
+        sensorHeading: sensor.heading,
+        acoustic: undefined,
+        passiveSnrDb: snrDb,
+      };
+      return { status: "locked", observation, acoustic: bearingOnlyChannel };
+    });
+  }
+
   private sampleContact(
     timestamp: number,
     sensor: VehicleState,

@@ -170,6 +170,9 @@ export class ExtendedKalmanFilter {
       wrapAngle(observation.bearing - expected[0]),
       observation.range - expected[1],
     ];
+    if (observation.bearingOnly) {
+      return this.attemptBearingOnly(predicted, observation, innovation[0], h);
+    }
     const r = diagonal([
       observation.bearingVariance,
       observation.rangeVariance,
@@ -212,6 +215,70 @@ export class ExtendedKalmanFilter {
       ),
     );
     this.filter = { timestamp: observation.observedAt, state, covariance };
+    this.lastObservationAt = observation.observedAt;
+    this.lastAccepted = true;
+    return true;
+  }
+
+  /**
+   * Bearing-only (passive) update: a scalar innovation against the bearing
+   * row. Range is unobservable from a single leg — the covariance carries
+   * that honestly until own-ship geometry diversifies (the TMA problem).
+   * Hand-rolled rank-1 update; the 2x2 matrix path above is untouched and
+   * every legacy observation keeps its exact arithmetic.
+   */
+  private attemptBearingOnly(
+    predicted: FilterState,
+    observation: SensorObservation,
+    bearingInnovation: number,
+    h: Matrix,
+  ): boolean {
+    const p = predicted.covariance;
+    // S = h_bearing · P · h_bearingᵀ + R (scalar).
+    let s = observation.bearingVariance;
+    for (let row = 0; row < 4; row += 1) {
+      for (let col = 0; col < 4; col += 1) {
+        s += h[0][row] * p[row][col] * h[0][col];
+      }
+    }
+    const nis = (bearingInnovation * bearingInnovation) / s;
+    this.lastInnovation = [bearingInnovation, 0];
+    this.lastNis = nis;
+    if (nis > this.config.innovationGate) {
+      this.filter = predicted;
+      this.lastAccepted = false;
+      return false;
+    }
+    // k = P · hᵀ / S (4-vector), state += k · innovation.
+    const k = [0, 0, 0, 0];
+    for (let row = 0; row < 4; row += 1) {
+      let sum = 0;
+      for (let col = 0; col < 4; col += 1) sum += p[row][col] * h[0][col];
+      k[row] = sum / s;
+    }
+    const state = predicted.state.map(
+      (value, index) => value + k[index] * bearingInnovation,
+    );
+    // Covariance: (I − k h) P (I − k h)ᵀ + k R kᵀ with h the bearing row.
+    const covariance: Matrix = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+    for (let row = 0; row < 4; row += 1) {
+      for (let col = 0; col < 4; col += 1) {
+        let value = p[row][col];
+        for (let mid = 0; mid < 4; mid += 1) {
+          value -= k[row] * h[0][mid] * p[mid][col];
+          value -= p[row][mid] * h[0][mid] * k[col];
+        }
+        // + k (h P hᵀ + R) kᵀ = k S kᵀ — the rank-1 Joseph completion.
+        value += k[row] * k[col] * s;
+        covariance[row][col] = value;
+      }
+    }
+    const symmetrized = symmetrize(covariance);
+    this.filter = {
+      timestamp: observation.observedAt,
+      state,
+      covariance: symmetrized,
+    };
     this.lastObservationAt = observation.observedAt;
     this.lastAccepted = true;
     return true;

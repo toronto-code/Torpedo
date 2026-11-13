@@ -14,6 +14,7 @@ export type AmbiguityPreset =
   | "cluttered-approach"
   | "decoy-stress"
   | "ambiguous-fluctuator"
+  | "silent-approach"
   | "high-ambiguity";
 
 function contactVehicle(
@@ -216,6 +217,49 @@ export function createAmbiguityScenarioConfig(
           behavior: { kind: "constant-velocity" },
         },
       ];
+      return config;
+    }
+    case "silent-approach": {
+      // Bearings-only TMA: the weapon runs a silent passive midcourse —
+      // the target hears nothing until terminal activation — and the
+      // doctrine refuses to authorize until the solution has converged.
+      // One sub among the noise-makers: this preset isolates the TMA
+      // mechanic (crossing-sub ambiguity is the crossing-subs preset).
+      config.contacts = [
+        hostile(Math.PI - 0.35),
+        {
+          id: "freighter",
+          kind: "commercial-surface",
+          vehicle: vehicle(600, -1500, 1.2, 12, 0.5),
+          targetStrengthDb: 22,
+          radiatedNoiseDb: 165,
+          behavior: { kind: "constant-velocity" },
+        },
+        {
+          id: "whale",
+          kind: "biological",
+          vehicle: vehicle(900, 900, 2.4, 1.6, 4),
+          targetStrengthDb: -8,
+          radiatedNoiseDb: 148,
+          behavior: { kind: "biologic-wander", amplitude: 0.8, period: 35 },
+        },
+      ];
+      // Bearing-only tracking assumes benign motion between own-ship legs;
+      // the maneuver adapter covers the late evasion.
+      config.estimator.accelerationNoise = 0.3;
+      config.weapon!.sensorPolicy = "passive-midcourse";
+      // A sprinting heavyweight is audible for kilometres; quiet search
+      // speed (18 m/s) stays below the hostile's counter-detection.
+      config.weapon!.radiatedNoise = { baseDb: 130, dbPerMs: 0.8 };
+      config.doctrine!.maxSolutionSigmaM = 700;
+      // Passive pictures move slowly: hold the designation through score
+      // seesaw (a challenger needs 3x), and age the track faster than the
+      // active presets since passive evidence accumulates continuously.
+      config.doctrine!.redesignateMargin = 3;
+      config.doctrine!.minTrackAgeS = 12;
+      // Passive classification is honestly weaker (no echo, no TS feature,
+      // no IFF marking): the solution gate carries the safety burden here.
+      config.doctrine!.requiredConfidence = 0.45;
       return config;
     }
     case "high-ambiguity":

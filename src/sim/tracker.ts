@@ -321,6 +321,22 @@ export class MultiTargetTracker {
     ];
     const h = measurementJacobian(state, observation.sensorPosition);
     const p = estimate.covariance;
+    if (observation.bearingOnly) {
+      // Scalar bearing gate: range is not part of the passive measurement,
+      // so association rides on bearing plus track continuity alone.
+      let s = observation.bearingVariance;
+      for (let row = 0; row < 4; row += 1) {
+        for (let col = 0; col < 4; col += 1) {
+          s += h[0][row] * p[row][col] * h[0][col];
+        }
+      }
+      const value = (residual[0] * residual[0]) / s;
+      const gate =
+        track.meta.quality === "coasting"
+          ? this.options.estimator.innovationGate * 2
+          : this.options.estimator.innovationGate;
+      return value <= gate ? value : null;
+    }
     const hphT = multiply(multiply(h, p), transpose2x2(h));
     const s: Matrix = [
       [hphT[0][0] + observation.bearingVariance, hphT[0][1]],

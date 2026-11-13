@@ -106,6 +106,10 @@ export interface DoctrineConfig {
    *  picture-development window during which classification evidence
    *  matures. Absent authorizes on confidence alone. */
   minTrackAgeS?: number;
+  /** Optional maximum designated-track 2-sigma position uncertainty (m)
+   *  for autonomous authorization: the fire-control solution must have
+   *  converged before the weapon commits. */
+  maxSolutionSigmaM?: number;
   /** Minimum seconds a designation is held before switching. */
   redesignateAfter: number;
   /** Score margin a challenger needs to take the designation. */
@@ -191,6 +195,13 @@ export interface WeaponSystemConfig {
   terminalSensor?: WeaponTerminalSensorConfig;
   fuze?: FuzeConfig;
   effectiveness?: EffectivenessConfig;
+  /** Seeker employment: active from launch (default), or a silent passive
+   *  midcourse that goes active only when the terminal phase begins. */
+  sensorPolicy?: "active" | "passive-midcourse";
+  /** Radiated noise of the weapon itself (truth side): a target with
+   *  perception hears this instead of pings while the seeker is passive.
+   *  Sprinting loudly advertises; quiet search speed stays stealthy. */
+  radiatedNoise?: SelfNoiseConfig;
 }
 
 export type SeekerStatus =
@@ -496,6 +507,10 @@ export interface SensorObservation {
    *  measurement feature for classification; independent of the active
    *  echo path. */
   passiveSnrDb?: number;
+  /** Bearing-only (passive) measurement: range carries a nominal prior
+   *  with a huge variance and is ignored by the filter's update — range
+   *  stays unobservable until own-ship geometry diversifies. */
+  bearingOnly?: boolean;
 }
 
 export interface TrackEstimate {
@@ -564,6 +579,11 @@ export interface WeaponTelemetry {
   enduranceRemaining: number | null;
   armed: boolean;
   commandedSpeed: number;
+  /** Current seeker employment ("passive" during a silent midcourse). */
+  sensorMode?: "passive" | "active";
+  /** Designated track 2-sigma position uncertainty (m); the TMA solution
+   *  quality. Null when no track is held. */
+  solutionSigmaM?: number | null;
   /** Frozen launch solution advisory (estimate symbology, not truth). */
   enablePoint: Vec2 | null;
   interceptPoint: Vec2 | null;
