@@ -20,6 +20,8 @@ export interface ContactRuntime {
   dynamics: VehicleDynamics;
   /** Truth-side threat perception state; present when spec.perception is. */
   perceptionState?: TargetPerceptionState;
+  /** Deployment time (s) for countermeasures; null until deployed. */
+  deployedAt: number | null;
 }
 
 /**
@@ -77,8 +79,9 @@ export function createContactRuntime(
   return {
     spec,
     state: dynamics.initialize(spec.vehicle),
-    active: spec.behavior?.kind !== "decoy",
+    active: spec.behavior?.kind !== "decoy" && spec.behavior?.kind !== "knuckle",
     dynamics,
+    deployedAt: null,
     ...(spec.perception
       ? { perceptionState: initialTargetPerceptionState() }
       : {}),
@@ -86,12 +89,21 @@ export function createContactRuntime(
 }
 
 /** Effective target strength for a contact at its current aspect to the
- *  weapon: aspect-dependent when configured, otherwise the flat value. */
+ *  weapon: aspect-dependent when configured, otherwise the flat value.
+ *  Deployed countermeasures fade from their deployment time. */
 export function effectiveTargetStrength(
   runtime: ContactRuntime,
   weaponPosition: { x: number; y: number },
   fallbackDb: number,
+  now = 0,
 ): number {
+  const behavior = runtime.spec.behavior;
+  if (behavior?.kind === "knuckle" && runtime.deployedAt !== null) {
+    const age = Math.max(0, now - runtime.deployedAt);
+    const faded =
+      (runtime.spec.targetStrengthDb ?? fallbackDb) - behavior.fadeDbPerS * age;
+    return Math.max(-30, faded);
+  }
   const aspectEcho = runtime.spec.aspectEcho;
   if (!aspectEcho) {
     return runtime.spec.targetStrengthDb ?? fallbackDb;
@@ -148,4 +160,29 @@ export function activateDecoy(
     initial,
   });
   runtime.active = true;
+}
+
+/** Deploys a knuckle at its spawner's current state: stationary turbulence
+ *  that drifts slowly and whose echo strength decays away. */
+export function activateKnuckle(
+  runtime: ContactRuntime,
+  spawner: ContactRuntime,
+  at: number,
+): void {
+  const behavior = runtime.spec.behavior;
+  if (behavior?.kind !== "knuckle") return;
+  const initial = {
+    ...runtime.spec.vehicle.initial,
+    position: { ...spawner.state.position },
+    heading: spawner.state.heading,
+    speed: behavior.driftSpeed,
+    depth: spawner.state.depth,
+  };
+  initial.position = { ...spawner.state.position, z: spawner.state.depth };
+  runtime.state = runtime.dynamics.initialize({
+    ...runtime.spec.vehicle,
+    initial,
+  });
+  runtime.active = true;
+  runtime.deployedAt = at;
 }

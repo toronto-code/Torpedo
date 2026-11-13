@@ -37,6 +37,7 @@ export type ContactKind =
   | "commercial-surface"
   | "biological"
   | "decoy"
+  | "knuckle"
   | "ambiguous";
 
 export type ContactBehavior =
@@ -44,7 +45,10 @@ export type ContactBehavior =
   | { kind: "constant-turn"; rate: number }
   | { kind: "scripted-evasive"; triggerRange: number; rate: number }
   | { kind: "biologic-wander"; amplitude: number; period: number }
-  | { kind: "decoy"; triggerRange: number; deploySpeed: number; headingOffset?: number };
+  | { kind: "decoy"; triggerRange: number; deploySpeed: number; headingOffset?: number }
+  /** Stationary turbulence echo ejected by a hard turn (the classic
+   *  last-dish countermeasure): drifts slowly, echo strength decays. */
+  | { kind: "knuckle"; triggerRange: number; driftSpeed: number; fadeDbPerS: number };
 
 export interface ContactSpec {
   id: string;
@@ -126,6 +130,10 @@ export interface WeaponSpeedConfig {
   cruiseSpeed?: number;
   /** Commanded sprint speed in the terminal phase (m/s). */
   sprintSpeed?: number;
+  /** Quiet search speed during reacquisition (m/s): slowing cuts flow
+   *  self-noise and widens the effective detection cone, like a real
+   *  heavyweight weapon that searches slow and sprints to kill. */
+  searchSpeed?: number;
 }
 
 export interface WeaponEnduranceConfig {
@@ -155,6 +163,9 @@ export interface WeaponTerminalSensorConfig {
 export interface FuzeConfig {
   /** True 3D proximity trigger radius (m). */
   detectionRadius?: number;
+  /** Doppler-style discrimination: contacts moving slower than this
+   *  (m/s) cannot actuate the fuze. Absent keeps the plain radius test. */
+  minTargetSpeedMs?: number;
   /** Seeded actuation jitter on the trigger radius (m, default 0). */
   jitter?: number;
   /** Seconds after launch before the fuze arms (defaults to enable time). */

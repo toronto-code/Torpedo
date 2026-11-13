@@ -193,6 +193,7 @@ const CONTACT_COLORS: Record<string, number> = {
   "commercial-surface": 0xc9c9c9,
   biological: 0x7cb8d4,
   decoy: 0xff5c5c,
+  knuckle: 0xd7e4ea,
   ambiguous: 0xd4a7dd,
 };
 
@@ -290,6 +291,8 @@ class ContactMeshPool {
       geometry = new THREE.SphereGeometry(7, 12, 8);
     } else if (kind === "decoy") {
       geometry = new THREE.SphereGeometry(4, 10, 8);
+    } else if (kind === "knuckle") {
+      geometry = new THREE.SphereGeometry(9, 12, 8);
     } else {
       geometry = new THREE.CapsuleGeometry(4, 26, 6, 10);
       const mesh = new THREE.Mesh(

@@ -42,3 +42,25 @@ authorization consume features/estimates only.
 combined high ambiguity) on paired seeds with outcome mixes and
 time-to-authorize. Legacy single-target configurations are bit-identical
 (golden regression).
+
+## Countermeasures
+
+The decoy-stress preset carries the full layered terminal defense in the
+classic order: **decoy** (mobile, strong stable echo) deployed at 650 m,
+then a **knuckle** at 420 m — the turbulence cloud left by a hard turn,
+modeled as a near-stationary contact whose echo strength decays linearly
+(1.2 dB/s) after deployment. A knuckle presents a loud fresh echo that can
+steal a vacant designation during track confusion, then fades, forcing the
+weapon back to search — burning time and battery against its energy budget.
+
+Two weapon-side answers exist:
+
+- **Doppler-style fuze discrimination** (`fuze.minTargetSpeedMs`): contacts
+  moving slower than the gate cannot actuate the influence fuze, so
+  near-stationary scatter (turbulence, bottom features) is ignored while
+  hard maneuvering targets still trigger. Scoring treats knuckle kills as
+  countermeasure seduction.
+- **Quiet search speed** (`weapon.speed.searchSpeed`): during reacquisition
+  the weapon slows to 18 m/s; with the self-noise model this genuinely
+  lowers flow noise and widens the effective detection cone — search slow,
+  sprint to kill.

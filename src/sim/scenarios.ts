@@ -73,14 +73,14 @@ export function createAmbiguityScenarioConfig(
   config.doctrine.minTrackAgeS = 20;
   config.weapon = {
     phases: { enableTime: 4, terminalRange: 500, reacquireAfter: 3 },
-    speed: { cruiseSpeed: 30, sprintSpeed: 40 },
+    speed: { cruiseSpeed: 30, sprintSpeed: 40, searchSpeed: 18 },
     endurance: {
       // Heavyweight-class synthetic battery: ~6 min cruise / ~2.5 min
       // sprint, so a 2 km transit plus terminal sprint fits comfortably.
       battery: { capacityWs: 8.5e6, hotelW: 200, dragKW: 0.8 },
     },
     terminalSensor: { cadenceHz: 20, innovationGate: 9, fovHalfAngle: (80 * Math.PI) / 180 },
-    fuze: { detectionRadius: 25 },
+    fuze: { detectionRadius: 25, minTargetSpeedMs: 2.5 },
     effectiveness: { lethalRadius: 14, shape: 2 },
   };
   const vehicle = contactVehicle.bind(null, config.target);
@@ -185,6 +185,17 @@ export function createAmbiguityScenarioConfig(
           targetStrengthDb: 21,
           radiatedNoiseDb: 112,
           behavior: { kind: "decoy", triggerRange: 650, deploySpeed: 4, headingOffset: 0.5 },
+          deployedBy: "hostile",
+        },
+        {
+          // The classic layered terminal defense: decoy first, then the
+          // knuckle — a hard-turn turbulence cloud inside 500 m that
+          // presents a loud fresh echo and fades over ~80 s.
+          id: "knuckle",
+          kind: "knuckle",
+          vehicle: vehicle(2000, 650, Math.PI - 0.35, 0, 30),
+          targetStrengthDb: 18,
+          behavior: { kind: "knuckle", triggerRange: 420, driftSpeed: 1.5, fadeDbPerS: 1.2 },
           deployedBy: "hostile",
         },
       ];

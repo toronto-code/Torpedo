@@ -33,6 +33,7 @@ import { deriveSeed, SeededRandom } from "./random";
 import { horizontalRange, targetYawRateCommand } from "./scenario";
 import {
   activateDecoy,
+  activateKnuckle,
   contactControl,
   createContactRuntime,
   effectiveTargetStrength,
@@ -366,6 +367,7 @@ export class SimulationEngine {
             runtime,
             { x: this.torpedo.position.x, y: this.torpedo.position.y },
             this.config.acoustic?.targetStrengthDb ?? 0,
+            this.timestamp,
           ),
           impliedTsSigmaDb: null,
           snrDb: null,
@@ -465,9 +467,22 @@ export class SimulationEngine {
   /** Nearest active truth contact in full 3D (fuze/termination scoring). */
   private nearestActiveContact(): { runtime: ContactRuntime; separation: number } | null {
     if (!this.contactRuntimes) return null;
+    // Doppler-style fuze discrimination: near-stationary scatterers
+    // (turbulence clouds, bottom features) do not actuate a tuned
+    // influence fuze; hard moving targets do.
+    const minSpeed = this.weapon?.fuze?.minTargetSpeedMs;
     let best: { runtime: ContactRuntime; separation: number } | null = null;
     for (const runtime of this.contactRuntimes) {
       if (!runtime.active) continue;
+      if (
+        minSpeed !== undefined &&
+        Math.hypot(
+          runtime.state.velocity.x,
+          runtime.state.velocity.y,
+        ) < minSpeed
+      ) {
+        continue;
+      }
       const separation = Math.hypot(
         runtime.state.position.x - this.torpedo.position.x,
         runtime.state.position.y - this.torpedo.position.y,
@@ -682,6 +697,11 @@ export class SimulationEngine {
     if (this.homing?.phase === "terminal" && this.weapon.speed?.sprintSpeed !== undefined) {
       return this.weapon.speed.sprintSpeed;
     }
+    // Search slow, kill fast: cutting speed during reacquisition lowers
+    // flow self-noise and widens the effective detection cone.
+    if (this.homing?.phase === "reacquisition" && this.weapon.speed?.searchSpeed !== undefined) {
+      return this.weapon.speed.searchSpeed;
+    }
     return cruise;
   }
 
@@ -747,6 +767,7 @@ export class SimulationEngine {
             runtime,
             weaponPosition,
             this.config.acoustic?.targetStrengthDb ?? 0,
+            this.timestamp,
           ),
           echoFluctuation: runtime.spec.echoFluctuation,
           friendlySignature: runtime.spec.friendlySignature,
@@ -983,7 +1004,8 @@ export class SimulationEngine {
         this.result.engagementOutcome =
           nearest.runtime.spec.kind === "hostile-sub"
             ? "correct-hostile"
-            : nearest.runtime.spec.kind === "decoy"
+            : nearest.runtime.spec.kind === "decoy" ||
+                nearest.runtime.spec.kind === "knuckle"
               ? "decoy-seduction"
               : "wrong-contact";
       } else {
@@ -1021,7 +1043,7 @@ export class SimulationEngine {
       for (const runtime of this.contactRuntimes) {
         if (!runtime.active) {
           const behavior = runtime.spec.behavior;
-          if (behavior?.kind === "decoy") {
+          if (behavior?.kind === "decoy" || behavior?.kind === "knuckle") {
             const runtimes = this.contactRuntimes;
             const spawnerId =
               runtime.spec.deployedBy ??
@@ -1034,7 +1056,11 @@ export class SimulationEngine {
               ? horizontalRange(this.torpedo, spawner.state)
               : Number.POSITIVE_INFINITY;
             if (spawner && spawnerRange <= behavior.triggerRange) {
-              activateDecoy(runtime, spawner);
+              if (behavior.kind === "decoy") {
+                activateDecoy(runtime, spawner);
+              } else {
+                activateKnuckle(runtime, spawner, this.timestamp);
+              }
             }
           }
           if (!runtime.active) continue;
