@@ -103,14 +103,65 @@ export class MultiTargetTracker {
   }
 
   process(now: number, observation: SensorObservation): AssociationResult {
-    let best: { track: InternalTrack; distance: number } | null = null;
+    const gated: { track: InternalTrack; distance: number }[] = [];
     for (const track of this.tracks) {
       if (track.meta.quality === "deleted") continue;
       const distance = this.associationDistance(track, observation);
       if (distance === null) continue;
-      if (best === null || distance < best.distance) {
-        best = { track, distance };
+      gated.push({ track, distance });
+    }
+    gated.sort((a, b) => a.distance - b.distance || a.track.meta.id - b.track.meta.id);
+    const best = gated[0] ?? null;
+
+    if (best && observation.bearingOnly) {
+      // Multi-hypothesis passive update: range is unobservable on a single
+      // leg, so every bearing-gated hypothesis is fed. Own-ship legs make
+      // the wrong ranges' predicted bearings diverge; those hypotheses
+      // start failing their gates, coast, and are deleted — the survivor
+      // is the solution. A rejected hypothesis does NOT refresh its
+      // observation clock, so pruning actually reaches it.
+      let reported: AssociationResult | null = null;
+      for (const entry of gated) {
+        const accepted =
+          this.mode === "ekf"
+            ? entry.track.ekf.process(observation)
+            : (entry.track.raw.process(observation), true);
+        // A bearing-only solution that collapses onto the sensor itself is
+        // the classic zero-range singularity — it fits every bearing and
+        // is physically meaningless for a distant radiator. Kill it.
+        if (accepted) {
+          const estimate = entry.track.ekf.estimateAt(observation.observedAt);
+          const ownDx = (estimate?.position.x ?? 0) - observation.sensorPosition.x;
+          const ownDy = (estimate?.position.y ?? 0) - observation.sensorPosition.y;
+          if (Math.hypot(ownDx, ownDy) < 150) {
+            entry.track.meta.quality = "deleted";
+            if (reported === null) {
+              reported = {
+                trackId: entry.track.meta.id,
+                accepted: false,
+                distance: entry.distance,
+              };
+            }
+            continue;
+          }
+        }
+        entry.track.meta.lastDeliveryDelay =
+          observation.deliveredAt - observation.observedAt;
+        if (accepted) {
+          entry.track.meta.lastObservationAt = observation.observedAt;
+          entry.track.meta.acceptedCount += 1;
+          if (
+            entry.track.meta.acceptedCount >= this.options.confirmationCount
+          ) {
+            entry.track.meta.quality = "confirmed";
+          }
+        }
+        this.updateFeatures(entry.track, observation);
+        if (reported === null || !reported.accepted) {
+          reported = { trackId: entry.track.meta.id, accepted, distance: entry.distance };
+        }
       }
+      return reported!;
     }
 
     if (best) {
@@ -133,6 +184,17 @@ export class MultiTargetTracker {
       return { trackId: best.track.meta.id, accepted, distance: best.distance };
     }
 
+    if (observation.bearingOnly) {
+      const liveCount = this.tracks.filter(
+        (track) => track.meta.quality !== "deleted",
+      ).length;
+      if (liveCount >= 12) {
+        const single = this.initiateTrack(observation);
+        return { trackId: single.meta.id, accepted: true, distance: null };
+      }
+      const hypotheses = this.initiateBearingHypotheses(observation);
+      return { trackId: hypotheses[0].meta.id, accepted: true, distance: null };
+    }
     const track = this.initiateTrack(observation);
     return { trackId: track.meta.id, accepted: true, distance: null };
   }
@@ -239,6 +301,20 @@ export class MultiTargetTracker {
     this.updateFeatures(track, observation);
     this.tracks.push(track);
     return track;
+  }
+
+  /** Bearing-only birth spawns a small fan of range hypotheses (cheap
+   *  multi-hypothesis TMA); geometry divergence prunes them later. */
+  private initiateBearingHypotheses(
+    observation: SensorObservation,
+  ): InternalTrack[] {
+    const scales = [1, 0.55, 1.8];
+    return scales.map((scale) =>
+      this.initiateTrack({
+        ...observation,
+        range: observation.range * scale,
+      }),
+    );
   }
 
   private updateFeatures(track: InternalTrack, observation: SensorObservation): void {

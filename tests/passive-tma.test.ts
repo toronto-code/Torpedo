@@ -3,6 +3,7 @@ import { ExtendedKalmanFilter } from "../src/sim/ekf";
 import { wrapAngle } from "../src/sim/math";
 import { SeededRandom } from "../src/sim/random";
 import { SeekerModel } from "../src/sim/sensor";
+import { MultiTargetTracker } from "../src/sim/tracker";
 import { createDefaultConfig } from "../src/sim/config";
 import { updateTargetPerception, initialTargetPerceptionState } from "../src/sim/target-perception";
 import type { SensorObservation } from "../src/sim/types";
@@ -203,5 +204,69 @@ describe("weapon radiated-noise counter-detection", () => {
     }
     expect(state.detectedSince).toBeNull();
     expect(state.heardBearing).toBeNull();
+  });
+});
+
+describe("multi-hypothesis bearing-only tracking", () => {
+  it("spawns range hypotheses at birth and prunes them to the truth", () => {
+    const tracker = new MultiTargetTracker(
+      {
+        estimator: {
+          accelerationNoise: 0.3,
+          initialVelocityVariance: 16,
+          innovationGate: 9.21,
+          staleAfter: 1.5,
+        },
+        confirmationCount: 5,
+        tentativeTimeout: 2.5,
+        deletionTimeout: 6,
+      },
+      "ekf",
+    );
+    // Truth: contact at 1600 m bearing ~0. Own-ship legs diversify.
+    const truth = { x: 1600, y: 100 };
+    let own = { x: 0, y: 0 };
+    const random = new SeededRandom(3);
+    const dt = 0.125;
+    let delivered = 0;
+    for (let t = dt; t <= 90; t += dt) {
+      const bearingToTarget = Math.atan2(truth.y - own.y, truth.x - own.x);
+      const legHeading =
+        bearingToTarget + (Math.floor(t / 20) % 2 === 0 ? 0.87 : -0.87);
+      own = {
+        x: own.x + Math.cos(legHeading) * 18 * dt,
+        y: own.y + Math.sin(legHeading) * 18 * dt,
+      };
+      const dx = truth.x - own.x;
+      const dy = truth.y - own.y;
+      const observation: SensorObservation = {
+        id: delivered++,
+        observedAt: t,
+        deliveredAt: t + 0.1,
+        bearing: wrapAngle(Math.atan2(dy, dx) - legHeading) +
+          random.gaussian(0, 0.0335),
+        range: 2200,
+        bearingVariance: 0.0335 ** 2,
+        rangeVariance: 1400 ** 2,
+        bearingOnly: true,
+        sensorPosition: { x: own.x, y: own.y },
+        sensorHeading: legHeading,
+      };
+      tracker.process(t + 0.1, observation);
+      tracker.prune(t + 0.1);
+    }
+    const live = tracker.liveTracks(90);
+    // The fan collapses ONTO the solution: own-ship legs make the true
+    // range the only consistent hypothesis, so every survivor converges
+    // to the contact — no wrong-range ghosts persist.
+    expect(live.length).toBeGreaterThanOrEqual(1);
+    expect(live.length).toBeLessThanOrEqual(3);
+    for (const survivor of live) {
+      const error = Math.hypot(
+        survivor.estimate.position.x - truth.x,
+        survivor.estimate.position.y - truth.y,
+      );
+      expect(error).toBeLessThan(200);
+    }
   });
 });

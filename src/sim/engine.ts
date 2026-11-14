@@ -615,9 +615,11 @@ export class SimulationEngine {
     return this.config.estimator.staleAfter + deliveryDelay;
   }
 
-  /** Ends a passive midcourse: the seeker goes active from here on. */
+  /** Ends a passive midcourse: the seeker goes active from here on. A
+   *  weapon that has not been authorized stays silent — going active early
+   *  alerts the target and abandons the approach's whole purpose. */
   private activateSeeker(reason: string): void {
-    if (this.sensorActivated) return;
+    if (this.sensorActivated || !this.engagementAuthorized) return;
     this.sensorActivated = true;
     this.phaseTimeline.push({
       phase: this.homing?.phase ?? "homing",

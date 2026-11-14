@@ -153,12 +153,27 @@ export function updateTewa(input: TewaUpdateInput): TewaState {
   if (scored.length > 0) {
     const best = scored[0];
     if (!state.designation) {
-      state.designation = { trackId: best.candidate.trackId, since: input.now };
+      // Post-authorization re-selection may carry an evidence floor (see
+      // DoctrineConfig): a track born seconds ago has not had time for
+      // slow evidence to classify it away from sub-like.
+      const floorAge = input.doctrine.postAuthDesignationAgeS ?? 0;
+      const candidate =
+        state.authorized && floorAge > 0
+          ? scored.find(
+              (entry) =>
+                input.now - entry.candidate.createdAt >= floorAge,
+            ) ?? null
+          : best;
+      if (!candidate) {
+        // Nothing mature enough to re-designate: search on, hold fire.
+      } else {
+      state.designation = { trackId: candidate.candidate.trackId, since: input.now };
       state.events.push({
         stage: "select",
         at: input.now,
-        detail: `track ${best.candidate.trackId} (${best.candidate.classification.best}, confidence ${best.candidate.classification.confidence.toFixed(2)})`,
+        detail: `track ${candidate.candidate.trackId} (${candidate.candidate.classification.best}, confidence ${candidate.candidate.classification.confidence.toFixed(2)})`,
       });
+      }
     } else if (
       !state.authorized &&
       current &&

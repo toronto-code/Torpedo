@@ -252,6 +252,7 @@ export function createAmbiguityScenarioConfig(
       // speed (18 m/s) stays below the hostile's counter-detection.
       config.weapon!.radiatedNoise = { baseDb: 130, dbPerMs: 0.8 };
       config.doctrine!.maxSolutionSigmaM = 700;
+      config.doctrine!.postAuthDesignationAgeS = 5;
       // Passive pictures move slowly: hold the designation through score
       // seesaw (a challenger needs 3x), and age the track faster than the
       // active presets since passive evidence accumulates continuously.

@@ -110,6 +110,11 @@ export interface DoctrineConfig {
    *  for autonomous authorization: the fire-control solution must have
    *  converged before the weapon commits. */
   maxSolutionSigmaM?: number;
+  /** Optional minimum age (s) for a track born AFTER authorization to take
+   *  over the designation: slow-evidence pictures (passive) need a moment
+   *  before loud merchants classify away from sub-like. Absent disables
+   *  the floor. */
+  postAuthDesignationAgeS?: number;
   /** Minimum seconds a designation is held before switching. */
   redesignateAfter: number;
   /** Score margin a challenger needs to take the designation. */
