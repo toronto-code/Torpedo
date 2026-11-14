@@ -39,7 +39,7 @@ authorization consume features/estimates only.
 
 `npm run sim:engagement -- --runs 6` sweeps the ambiguity presets
 (crossing subs, cluttered approach, decoy stress, ambiguous fluctuator,
-combined high ambiguity) on paired seeds with outcome mixes and
+silent approach, combined high ambiguity) on paired seeds with outcome mixes and
 time-to-authorize. Legacy single-target configurations are bit-identical
 (golden regression).
 

@@ -514,6 +514,13 @@ export class SimulationEngine {
         doctrine: this.config.doctrine ?? defaultDoctrine(),
       });
       if (!this.tewa.authorized) {
+        // A passive midcourse's phase clock runs regardless of doctrine —
+        // its run-out completes while authorization is pending. Active
+        // policies keep the validated frozen-during-hold-fire behavior
+        // (the launch-solution track is stale pre-authorization).
+        if (this.weapon?.sensorPolicy === "passive-midcourse") {
+          this.updateWeaponPhase(this.selectedTrack());
+        }
         // Hold fire: maintain a deterministic orbit standoff around the
         // best tracked candidate so the seeker keeps the contact group in
         // view while authorization is pending, instead of overshooting or
@@ -608,8 +615,30 @@ export class SimulationEngine {
     return this.config.estimator.staleAfter + deliveryDelay;
   }
 
+  /** Ends a passive midcourse: the seeker goes active from here on. */
+  private activateSeeker(reason: string): void {
+    if (this.sensorActivated) return;
+    this.sensorActivated = true;
+    this.phaseTimeline.push({
+      phase: this.homing?.phase ?? "homing",
+      startedAt: this.timestamp,
+      reason: `seeker activated (${reason})`,
+    });
+  }
+
   private updateWeaponPhase(track: TrackEstimate | null): void {
     if (!this.weapon || !this.homing) return;
+    // Enable-on-distance fallback: a passive midcourse also activates
+    // after a configured along-track run, even if the (possibly wrong)
+    // solution never estimates terminal range.
+    if (
+      this.weapon.sensorPolicy === "passive-midcourse" &&
+      !this.sensorActivated &&
+      this.weapon.phases?.enableDistance !== undefined &&
+      this.distanceTravelled >= this.weapon.phases.enableDistance
+    ) {
+      this.activateSeeker("enable distance");
+    }
     const estimatedRange = track
       ? magnitude2(
           subtract2(track.position, {
@@ -645,12 +674,7 @@ export class SimulationEngine {
           this.weapon.sensorPolicy === "passive-midcourse" &&
           !this.sensorActivated
         ) {
-          this.sensorActivated = true;
-          this.phaseTimeline.push({
-            phase: "terminal",
-            startedAt: this.timestamp,
-            reason: "seeker activated (passive midcourse ended)",
-          });
+          this.activateSeeker("terminal range");
         }
         const cadenceHz = this.weapon.terminalSensor?.cadenceHz;
         if (cadenceHz !== undefined) {
@@ -699,7 +723,7 @@ export class SimulationEngine {
         this.torpedo.heading,
       );
     }
-    return computeGuidance(
+    const command = computeGuidance(
       {
         timestamp: this.timestamp,
         ownPosition: {
@@ -715,6 +739,26 @@ export class SimulationEngine {
       },
       this.config.guidance,
     );
+    if (
+      this.weapon?.sensorPolicy === "passive-midcourse" &&
+      !this.sensorActivated
+    ) {
+      // Snake while closing passively: a slow cross-course sinusoid keeps
+      // the bearing history diversifying, so the solution keeps converging
+      // instead of collapsing onto an unobservable constant bearing.
+      const snake = 0.35 * Math.sin((2 * Math.PI * this.timestamp) / 30);
+      const desired = command.desiredHeading + snake;
+      const headingError = wrapAngle(desired - this.torpedo.heading);
+      return {
+        ...command,
+        desiredHeading: desired,
+        lateralAcceleration: Math.min(
+          this.config.guidance.maxLateralAcceleration,
+          headingError * Math.max(1, this.torpedo.speed) * 0.6,
+        ),
+      };
+    }
+    return command;
   }
 
   private commandedSpeedForPhase(): number {
