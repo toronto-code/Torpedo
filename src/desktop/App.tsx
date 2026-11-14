@@ -484,6 +484,50 @@ export function App() {
               { label: "position 2σ RMS", color: "#769eb5", value: positionUncertainty },
             ]}
           />
+          <MiniPlot
+            title="TMA SOLUTION · RANGE ± 2σ"
+            unit="m"
+            samples={displayTelemetry}
+            series={[
+              {
+                label: "R",
+                color: "#7cf7df",
+                value: (sample) =>
+                  sample.estimate
+                    ? Math.hypot(
+                        sample.estimate.position.x - sample.torpedo.position.x,
+                        sample.estimate.position.y - sample.torpedo.position.y,
+                      )
+                    : null,
+              },
+              {
+                label: "R−σ",
+                color: "#769eb5",
+                value: (sample) => {
+                  if (!sample.estimate || sample.weapon?.solutionSigmaM == null) return null;
+                  return (
+                    Math.hypot(
+                      sample.estimate.position.x - sample.torpedo.position.x,
+                      sample.estimate.position.y - sample.torpedo.position.y,
+                    ) - sample.weapon.solutionSigmaM / 2
+                  );
+                },
+              },
+              {
+                label: "R+σ",
+                color: "#769eb5",
+                value: (sample) => {
+                  if (!sample.estimate || sample.weapon?.solutionSigmaM == null) return null;
+                  return (
+                    Math.hypot(
+                      sample.estimate.position.x - sample.torpedo.position.x,
+                      sample.estimate.position.y - sample.torpedo.position.y,
+                    ) + sample.weapon.solutionSigmaM / 2
+                  );
+                },
+              },
+            ]}
+          />
         </section>
       </div> : (
         <section className="analysis-workspace">

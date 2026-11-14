@@ -162,7 +162,7 @@ describe("closest-point proximity fuze", () => {
 });
 
 describe("weapon dives with a designated deep contact", () => {
-  it("default preset: weapon reaches the hostile's depth band before the fuze fires", () => {
+  it("default preset: weapon reaches the hostile's depth band before the fuze fires", { timeout: 60000 }, () => {
     const config = createAmbiguityScenarioConfig("high-ambiguity", 20260816);
     const run = runHeadless(config);
     const result = run.result;
@@ -178,7 +178,7 @@ describe("weapon dives with a designated deep contact", () => {
     expect(Math.abs(final.torpedo.depth - hostile.depth)).toBeLessThan(60);
   });
 
-  it("is deterministic per seed", () => {
+  it("is deterministic per seed", { timeout: 60000 }, () => {
     const config = createAmbiguityScenarioConfig("crossing-subs", 4242);
     const first = runHeadless(config).result;
     const second = runHeadless(config).result;

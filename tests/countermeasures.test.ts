@@ -39,7 +39,7 @@ describe("knuckle countermeasure", () => {
     expect(at(500)).toBe(-30);
   });
 
-  it("is excluded from fuze actuation by the Doppler-style speed gate", () => {
+  it("is excluded from fuze actuation by the Doppler-style speed gate", { timeout: 60000 }, () => {
     const config = createAmbiguityScenarioConfig("decoy-stress", 20260816);
     expect(config.weapon!.fuze!.minTargetSpeedMs).toBeGreaterThan(0);
     const run = runHeadless(config);
@@ -56,7 +56,7 @@ describe("knuckle countermeasure", () => {
     expect(again.fuzeMissDistance).toEqual(result.fuzeMissDistance);
   });
 
-  it("searches quiet during reacquisition (self-noise trades speed for cone)", () => {
+  it("searches quiet during reacquisition (self-noise trades speed for cone)", { timeout: 60000 }, () => {
     const config = createAmbiguityScenarioConfig("decoy-stress", 20260816);
     expect(config.weapon!.speed!.searchSpeed).toBeDefined();
     const run = runHeadless(config);

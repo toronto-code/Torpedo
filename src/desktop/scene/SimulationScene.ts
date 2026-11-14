@@ -808,8 +808,8 @@ export class SimulationScene {
     const points = this.covariancePoints;
     for (let index = 0; index < 72; index += 1) {
       const angle = (index / 72) * Math.PI * 2;
-      const x = Math.cos(angle) * Math.min(major, 1_500);
-      const z = Math.sin(angle) * Math.min(minor, 1_500);
+      const x = Math.cos(angle) * Math.min(major, 4_000);
+      const z = Math.sin(angle) * Math.min(minor, 4_000);
       points[index * 3] = estimate.position.x + x * cosTheta - z * sinTheta;
       points[index * 3 + 1] = centerY;
       points[index * 3 + 2] = estimate.position.y + x * sinTheta + z * cosTheta;

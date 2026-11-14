@@ -79,7 +79,7 @@ button:disabled, fieldset:disabled { opacity: 0.46; cursor: not-allowed; }
   padding: 5px;
   display: grid;
   grid-template-columns: 306px minmax(500px, 1fr) 360px;
-  grid-template-rows: minmax(360px, 1fr) 50px 188px;
+  grid-template-rows: minmax(280px, 1fr) 50px auto;
   gap: 5px;
 }
 .panel { min-width: 0; background: var(--surface-1); border: 1px solid var(--line); }
@@ -197,7 +197,7 @@ input[type="range"] { width: 100%; height: 15px; margin-top: 3px; accent-color: 
 .replay-actions button, .file-button { height: 25px; padding: 0 7px; display: inline-flex; align-items: center; justify-content: center; color: #a9aeaf; border: 1px solid var(--line); background: var(--surface-2); border-radius: 0; cursor: pointer; font: 600 7px var(--mono); }
 .file-button input { display: none; }.replay-health .verified { color: var(--green); }
 
-.plot-deck { grid-column: 2 / 4; grid-row: 3; display: grid; grid-template-columns: repeat(2, minmax(260px, 1fr)); gap: 5px; min-width: 0; }
+.plot-deck { grid-column: 2 / 4; grid-row: 3; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 5px; min-width: 0; }
 .plot-card { min-width: 0; margin: 0; border: 1px solid var(--line); background: var(--surface-1); overflow: hidden; }
 .plot-card header { height: 27px; padding: 0 8px; display: flex; align-items: center; justify-content: space-between; color: #a5aaac; border-bottom: 1px solid var(--line); font: 600 8px var(--mono); letter-spacing: .07em; }
 .plot-unit { color: var(--dim); }.plot-card svg { display: block; width: 100%; height: 118px; background: #181b1d; }
