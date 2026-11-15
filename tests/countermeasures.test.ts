@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createAmbiguityScenarioConfig } from "../src/sim/scenarios";
 import { runHeadless } from "../src/sim/engine";
+import { pathScreeningLossDb } from "../src/sim/acoustics";
 import {
   activateKnuckle,
   createContactRuntime,
@@ -69,4 +70,47 @@ describe("knuckle countermeasure", () => {
     // search; the quiet speed must be commanded there.
     expect(reacquire.length).toBeGreaterThan(0);
   });
+});
+
+describe("jammer and occluding screen", () => {
+  it("screening loss applies only to crossing paths, fading at the rim", () => {
+    const screens = [{ x: 500, y: 0, radiusM: 130, lossDb: 11 }];
+    // Path straight through the center: full loss.
+    expect(pathScreeningLossDb(0, 0, 1000, 0, screens)).toBeCloseTo(11, 6);
+    // Path passing the rim: near zero.
+    expect(pathScreeningLossDb(0, 129.9, 1000, 129.9, screens)).toBeLessThan(0.2);
+    // Path missing entirely: zero.
+    expect(pathScreeningLossDb(0, 400, 1000, 400, screens)).toBe(0);
+    // Path clipping the near side: partial.
+    const partial = pathScreeningLossDb(0, 100, 1000, 60, screens);
+    expect(partial).toBeGreaterThan(0);
+    expect(partial).toBeLessThan(11);
+    expect(pathScreeningLossDb(0, 0, 1000, 0, [])).toBe(0);
+  });
+
+  it("a jammer raises the receiver noise floor and degrades detection", () => {
+    const config = createAmbiguityScenarioConfig("decoy-stress", 20260816);
+    const spec = config.contacts!.find((c) => c.id === "jammer")!;
+    expect(spec.behavior).toMatchObject({ kind: "jammer" });
+    // The full-suite preset completes deterministically with the layered
+    // defense active (jammer -> screen -> decoy -> knuckle).
+    const run = runHeadless(config);
+    const again = runHeadless(config);
+    expect(again.result.engagementOutcome).toEqual(run.result.engagementOutcome);
+    expect(again.result.terminationReason).toEqual(run.result.terminationReason);
+    expect(run.result.terminationReason).toBe("fuzed-detonation");
+  }, 120000);
+
+  it("deploys the full countermeasure timeline in the preset", () => {
+    const config = createAmbiguityScenarioConfig("decoy-stress", 20260816);
+    const run = runHeadless(config);
+    const deployments = run.result.phaseTimeline
+      ?.filter((entry) => entry.reason.startsWith("countermeasure deployed:"))
+      .map((entry) => entry.reason.slice("countermeasure deployed: ".length));
+    // Escalating timeline: jammer first, then screen, decoy, knuckle.
+    expect(deployments).toContain("jammer");
+    expect(deployments).toContain("bubble-screen");
+    expect(deployments).toContain("decoy");
+    expect(deployments).toContain("knuckle");
+  }, 120000);
 });

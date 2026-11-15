@@ -194,6 +194,8 @@ const CONTACT_COLORS: Record<string, number> = {
   biological: 0x7cb8d4,
   decoy: 0xff5c5c,
   knuckle: 0xd7e4ea,
+  jammer: 0xffa15c,
+  "bubble-screen": 0x9fb8c8,
   ambiguous: 0xd4a7dd,
 };
 
@@ -293,6 +295,10 @@ class ContactMeshPool {
       geometry = new THREE.SphereGeometry(4, 10, 8);
     } else if (kind === "knuckle") {
       geometry = new THREE.SphereGeometry(9, 12, 8);
+    } else if (kind === "jammer") {
+      geometry = new THREE.SphereGeometry(3.5, 10, 8);
+    } else if (kind === "bubble-screen") {
+      geometry = new THREE.SphereGeometry(12, 14, 10);
     } else {
       geometry = new THREE.CapsuleGeometry(4, 26, 6, 10);
       const mesh = new THREE.Mesh(

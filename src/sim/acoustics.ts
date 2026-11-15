@@ -135,3 +135,46 @@ export function acousticChannel(
     ...(profile ? { refractionLossDb: refraction } : {}),
   };
 }
+
+export interface ScreeningVolume {
+  x: number;
+  y: number;
+  radiusM: number;
+  lossDb: number;
+}
+
+/** Extra one-way loss when the direct path passes through a screening
+ *  volume (a bubble cloud): full loss through the center, fading to zero
+ *  at the rim. Returns 0 when the path misses every volume. */
+export function pathScreeningLossDb(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  volumes: readonly ScreeningVolume[],
+): number {
+  if (volumes.length === 0) return 0;
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const lengthSquared = dx * dx + dy * dy;
+  let total = 0;
+  for (const volume of volumes) {
+    let t = lengthSquared > 1e-9
+      ? ((volume.x - fromX) * dx + (volume.y - fromY) * dy) / lengthSquared
+      : 0;
+    t = Math.max(0, Math.min(1, t));
+    const closestX = fromX + dx * t;
+    const closestY = fromY + dy * t;
+    const miss = Math.hypot(volume.x - closestX, volume.y - closestY);
+    if (miss < volume.radiusM) {
+      const depth = 1 - miss / volume.radiusM;
+      total += volume.lossDb * depth;
+    }
+  }
+  return total;
+}
+
+/** Power-sums an in-band jammer's noise into an ambient level (dB). */
+export function powerSumDb(a: number, b: number): number {
+  return 10 * Math.log10(10 ** (a / 10) + 10 ** (b / 10));
+}

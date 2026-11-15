@@ -1,6 +1,11 @@
 import { magnitude2, subtract2, wrapAngle } from "./math";
 import { SeededRandom } from "./random";
-import { acousticChannel } from "./acoustics";
+import {
+  acousticChannel,
+  pathScreeningLossDb,
+  powerSumDb,
+  type ScreeningVolume,
+} from "./acoustics";
 import type {
   AcousticChannelState,
   AcousticConfig,
@@ -15,6 +20,14 @@ export interface SensorSample {
   status: SeekerStatus;
   observation: SensorObservation | null;
   acoustic: AcousticChannelState | null;
+}
+
+/** Truth-side countermeasure effects for one ping: in-band jamming noise
+ *  at the receiver (dB, already path-attenuated) and screening volumes
+ *  crossed by propagation paths. Computed by the engine from truth. */
+export interface CountermeasureEffects {
+  jammingNoiseDb: number | null;
+  screens: ScreeningVolume[];
 }
 
 /** Truth-side inputs for one contact during a multi-return ping. The
@@ -109,6 +122,7 @@ export class SeekerModel {
       channel: SeededRandom;
       depth?: SeededRandom | null;
     },
+    countermeasures?: CountermeasureEffects,
   ): SensorSample[] | null {
     if (timestamp + 1e-10 < this.nextSampleTime) return null;
     this.nextSampleTime += 1 / this.cadenceHz;
@@ -126,6 +140,7 @@ export class SeekerModel {
         stream.channel,
         stream.depth,
         contact.radiatedNoiseDb,
+        countermeasures,
       );
     });
   }
@@ -146,6 +161,7 @@ export class SeekerModel {
       passive: SeededRandom;
     }[],
     fallbackStreams: { noise: SeededRandom; passive: SeededRandom },
+    countermeasures?: CountermeasureEffects,
   ): SensorSample[] | null {
     if (timestamp + 1e-10 < this.nextSampleTime) return null;
     this.nextSampleTime += 1 / this.cadenceHz;
@@ -155,6 +171,9 @@ export class SeekerModel {
       const selfDb = selfNoise.baseDb + selfNoise.dbPerMs * sensor.speed;
       ambientDb =
         10 * Math.log10(10 ** (this.acoustic.ambientNoiseDb / 10) + 10 ** (selfDb / 10));
+    }
+    if (countermeasures?.jammingNoiseDb != null) {
+      ambientDb = powerSumDb(ambientDb, countermeasures.jammingNoiseDb);
     }
     return contacts.map((contact, index) => {
       const stream = streams[index] ?? fallbackStreams;
@@ -184,6 +203,13 @@ export class SeekerModel {
       const snrDb =
         contact.radiatedNoiseDb -
         bearingOnlyChannel.oneWayTransmissionLossDb -
+        pathScreeningLossDb(
+          sensor.position.x,
+          sensor.position.y,
+          contact.state.position.x,
+          contact.state.position.y,
+          countermeasures?.screens ?? [],
+        ) -
         ambientDb;
       const scale = Math.max(0.01, this.acoustic.detectionTransitionDb);
       const detectionProbability = 1 / (
@@ -231,6 +257,7 @@ export class SeekerModel {
     channelRandom: SeededRandom | undefined,
     depthRandom: SeededRandom | null = null,
     radiatedNoiseDb?: number,
+    countermeasures?: CountermeasureEffects,
   ): SensorSample {
     const relative = subtract2(target.position, sensor.position);
     const range = magnitude2(relative);
@@ -247,7 +274,17 @@ export class SeekerModel {
           10 ** (this.acoustic.ambientNoiseDb / 10) + 10 ** (selfDb / 10),
         );
     }
-    const channel = this.environment && this.acoustic?.enabled
+    if (countermeasures?.jammingNoiseDb != null) {
+      ambientDb = powerSumDb(ambientDb, countermeasures.jammingNoiseDb);
+    }
+    const screeningLossDb = pathScreeningLossDb(
+      sensor.position.x,
+      sensor.position.y,
+      target.position.x,
+      target.position.y,
+      countermeasures?.screens ?? [],
+    );
+    let channel = this.environment && this.acoustic?.enabled
       ? acousticChannel(
           timestamp,
           range,
@@ -266,6 +303,22 @@ export class SeekerModel {
           },
         )
       : null;
+    if (channel && screeningLossDb > 0) {
+      // A bubble screen crossing the weapon-contact path attenuates the
+      // two-way echo; detection rides the screened probability.
+      const signalToNoiseDb = channel.signalToNoiseDb - 2 * screeningLossDb;
+      const scale = Math.max(0.01, this.acoustic?.detectionTransitionDb ?? 3);
+      channel = {
+        ...channel,
+        oneWayTransmissionLossDb: channel.oneWayTransmissionLossDb + screeningLossDb,
+        receivedEchoLevelDb: channel.receivedEchoLevelDb - 2 * screeningLossDb,
+        signalToNoiseDb,
+        detectionProbability:
+          1 / (1 + Math.exp(-(
+            (signalToNoiseDb - (this.acoustic?.detectionThresholdDb ?? 0)) / scale
+          ))),
+      };
+    }
     if (range < this.config.minRange || range > this.config.maxRange) {
       return { status: "out-of-range", observation: null, acoustic: channel };
     }
@@ -327,8 +380,9 @@ export class SeekerModel {
       // heard against the (self-noise-degraded) ambient. Sprinting blinds
       // the passive band exactly as it degrades the active one.
       observation.passiveSnrDb =
-        radiatedNoiseDb - channel.oneWayTransmissionLossDb - ambientDb;
+        radiatedNoiseDb - channel.oneWayTransmissionLossDb - screeningLossDb - ambientDb;
     }
+
     return { status: "locked", observation, acoustic: channel };
   }
 }

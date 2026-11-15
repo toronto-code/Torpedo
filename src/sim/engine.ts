@@ -39,7 +39,12 @@ import {
   effectiveTargetStrength,
   type ContactRuntime,
 } from "./contacts";
-import { SeekerModel, type SeekerContact } from "./sensor";
+import {
+  SeekerModel,
+  type CountermeasureEffects,
+  type SeekerContact,
+} from "./sensor";
+import { powerSumDb, type ScreeningVolume } from "./acoustics";
 import { updateTargetPerception } from "./target-perception";
 import { MultiTargetTracker, type TrackFeatures } from "./tracker";
 import { ContactClassifier, type TrackClassification } from "./classify";
@@ -833,6 +838,55 @@ export class SimulationEngine {
     };
   }
 
+  /** Truth-side countermeasure effects for the current ping: in-band
+   *  jamming noise at the weapon receiver and active screening volumes
+   *  (fading with age). */
+  private countermeasureEffects(): CountermeasureEffects | undefined {
+    if (!this.contactRuntimes) return undefined;
+    let jamming: number | null = null;
+    const screens: ScreeningVolume[] = [];
+    let any = false;
+    for (const runtime of this.contactRuntimes) {
+      if (!runtime.active || runtime.deployedAt === null) continue;
+      const behavior = runtime.spec.behavior;
+      const age = this.timestamp - runtime.deployedAt;
+      if (behavior?.kind === "jammer") {
+        const range = Math.max(
+          1,
+          Math.hypot(
+            runtime.state.position.x - this.torpedo.position.x,
+            runtime.state.position.y - this.torpedo.position.y,
+          ),
+        );
+        // In-band noise on the direct path, against the base ambient
+        // (self-noise is applied inside the seeker).
+        const spreading = this.config.environment?.spreadingCoefficient ?? 17;
+        const absorption = this.config.acoustic
+          ? thorpAbsorptionDbPerKm(this.config.acoustic.frequencyKhz) * range / 1000
+          : 0;
+        const received =
+          behavior.noiseDb - spreading * Math.log10(range) - absorption;
+        jamming = jamming === null ? received : powerSumDb(jamming, received);
+        any = true;
+      } else if (behavior?.kind === "bubble-screen") {
+        const loss = Math.max(
+          0,
+          behavior.lossDb - behavior.fadeDbPerS * age,
+        );
+        if (loss > 0.5) {
+          screens.push({
+            x: runtime.state.position.x,
+            y: runtime.state.position.y,
+            radiusM: behavior.effectRadiusM,
+            lossDb: loss,
+          });
+          any = true;
+        }
+      }
+    }
+    return any ? { jammingNoiseDb: jamming, screens } : undefined;
+  }
+
   private sampleAndDeliverObservations(): void {
     if (this.contactRuntimes) {
       // Silent midcourse: listen instead of ping. The weapon builds a
@@ -855,6 +909,7 @@ export class SimulationEngine {
           radiating,
           this.contactStreams,
           { noise: new SeededRandom(0), passive: new SeededRandom(0) },
+          this.countermeasureEffects(),
         );
         if (samples) {
           this.lastPingAt = this.timestamp;
@@ -899,6 +954,7 @@ export class SimulationEngine {
           channel: new SeededRandom(0),
           depth: null,
         },
+        this.countermeasureEffects(),
       );
       if (samples) {
         this.lastPingAt = this.timestamp;
@@ -1180,7 +1236,12 @@ export class SimulationEngine {
       for (const runtime of this.contactRuntimes) {
         if (!runtime.active) {
           const behavior = runtime.spec.behavior;
-          if (behavior?.kind === "decoy" || behavior?.kind === "knuckle") {
+          if (
+            behavior?.kind === "decoy" ||
+            behavior?.kind === "knuckle" ||
+            behavior?.kind === "jammer" ||
+            behavior?.kind === "bubble-screen"
+          ) {
             const runtimes = this.contactRuntimes;
             const spawnerId =
               runtime.spec.deployedBy ??
@@ -1198,6 +1259,11 @@ export class SimulationEngine {
               } else {
                 activateKnuckle(runtime, spawner, this.timestamp);
               }
+              this.phaseTimeline.push({
+                phase: this.homing?.phase ?? "run-out",
+                startedAt: this.timestamp,
+                reason: `countermeasure deployed: ${behavior.kind}`,
+              });
             }
           }
           if (!runtime.active) continue;

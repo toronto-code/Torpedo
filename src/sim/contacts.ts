@@ -79,7 +79,9 @@ export function createContactRuntime(
   return {
     spec,
     state: dynamics.initialize(spec.vehicle),
-    active: spec.behavior?.kind !== "decoy" && spec.behavior?.kind !== "knuckle",
+    active: !["decoy", "knuckle", "jammer", "bubble-screen"].includes(
+      spec.behavior?.kind ?? "",
+    ),
     dynamics,
     deployedAt: null,
     ...(spec.perception
@@ -162,20 +164,28 @@ export function activateDecoy(
   runtime.active = true;
 }
 
-/** Deploys a knuckle at its spawner's current state: stationary turbulence
- *  that drifts slowly and whose echo strength decays away. */
+/** Deploys a stationary countermeasure (knuckle, jammer, bubble screen)
+ *  at its spawner's current state. */
 export function activateKnuckle(
   runtime: ContactRuntime,
   spawner: ContactRuntime,
   at: number,
 ): void {
   const behavior = runtime.spec.behavior;
-  if (behavior?.kind !== "knuckle") return;
+  if (
+    behavior?.kind !== "knuckle" &&
+    behavior?.kind !== "jammer" &&
+    behavior?.kind !== "bubble-screen"
+  ) {
+    return;
+  }
+  const drift =
+    behavior.kind === "knuckle" ? behavior.driftSpeed : 0.5;
   const initial = {
     ...runtime.spec.vehicle.initial,
     position: { ...spawner.state.position },
     heading: spawner.state.heading,
-    speed: behavior.driftSpeed,
+    speed: drift,
     depth: spawner.state.depth,
   };
   initial.position = { ...spawner.state.position, z: spawner.state.depth };

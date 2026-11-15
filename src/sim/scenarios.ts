@@ -189,6 +189,33 @@ export function createAmbiguityScenarioConfig(
           deployedBy: "hostile",
         },
         {
+          // Layered defense, outer ring: an in-band noise jammer that
+          // raises the weapon receiver's floor and degrades every
+          // detection while it is in range.
+          id: "jammer",
+          kind: "jammer",
+          vehicle: vehicle(2000, 650, Math.PI - 0.35, 0, 30),
+          targetStrengthDb: 4,
+          behavior: { kind: "jammer", triggerRange: 1200, noiseDb: 132 },
+          deployedBy: "hostile",
+        },
+        {
+          // Occluding screen: breaks the lock by crossing loss rather
+          // than by presenting a false target.
+          id: "screen",
+          kind: "bubble-screen",
+          vehicle: vehicle(2000, 650, Math.PI - 0.35, 0, 30),
+          targetStrengthDb: 4,
+          behavior: {
+            kind: "bubble-screen",
+            triggerRange: 850,
+            effectRadiusM: 130,
+            lossDb: 11,
+            fadeDbPerS: 0.08,
+          },
+          deployedBy: "hostile",
+        },
+        {
           // The classic layered terminal defense: decoy first, then the
           // knuckle — a hard-turn turbulence cloud inside 500 m that
           // presents a loud fresh echo and fades over ~80 s.

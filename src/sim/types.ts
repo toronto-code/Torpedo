@@ -38,6 +38,8 @@ export type ContactKind =
   | "biological"
   | "decoy"
   | "knuckle"
+  | "jammer"
+  | "bubble-screen"
   | "ambiguous";
 
 export type ContactBehavior =
@@ -48,7 +50,13 @@ export type ContactBehavior =
   | { kind: "decoy"; triggerRange: number; deploySpeed: number; headingOffset?: number }
   /** Stationary turbulence echo ejected by a hard turn (the classic
    *  last-dish countermeasure): drifts slowly, echo strength decays. */
-  | { kind: "knuckle"; triggerRange: number; driftSpeed: number; fadeDbPerS: number };
+  | { kind: "knuckle"; triggerRange: number; driftSpeed: number; fadeDbPerS: number }
+  /** In-band noise jammer: raises the weapon receiver's noise floor,
+   *  degrading every detection while it is nearby. */
+  | { kind: "jammer"; triggerRange: number; noiseDb: number }
+  /** Occluding bubble screen: adds path loss to any weapon-contact path
+   *  crossing it, breaking locks without presenting a false target. */
+  | { kind: "bubble-screen"; triggerRange: number; effectRadiusM: number; lossDb: number; fadeDbPerS: number }
 
 export interface ContactSpec {
   id: string;
