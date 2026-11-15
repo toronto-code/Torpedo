@@ -41,12 +41,11 @@ describe("engagement outcome baseline", () => {
     expect(fraction("high-ambiguity", "decoy-seduction")).toBeGreaterThanOrEqual(0.33);
     expect(fraction("high-ambiguity", "correct-hostile")).toBeGreaterThanOrEqual(0.16);
 
-    // Experimental TMA preset: the machinery must still complete
-    // engagements (detonations) across the paired seeds.
-    const silentDetonations =
-      1 -
-      fraction("silent-approach", "miss");
-    expect(silentDetonations).toBeGreaterThanOrEqual(0.5);
+    // Bearings-only TMA preset: a first-class scenario — mostly clean
+    // kills, nothing may regress into countermeasure or wrong-contact
+    // kills beyond honest ambiguity.
+    expect(fraction("silent-approach", "correct-hostile")).toBeGreaterThanOrEqual(0.66);
+    expect(fraction("silent-approach", "miss")).toBeLessThanOrEqual(0.34);
 
     // Nothing regresses into pure-timeout territory.
     for (const variant of report.variants) {

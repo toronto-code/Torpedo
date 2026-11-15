@@ -15,8 +15,11 @@ function trackEstimate(overrides: Partial<TrackEstimate> = {}): TrackEstimate {
     covariance: [
       [50, 0, 0, 0],
       [0, 50, 0, 0],
-      [0, 0, 10, 0],
-      [0, 0, 0, 10],
+      // Converged velocity estimate (sigma 0.5 m/s): classification is
+      // uncertainty-aware, so a loose velocity covariance honestly
+      // softens the kinematic evidence.
+      [0, 0, 0.25, 0],
+      [0, 0, 0, 0.25],
     ],
     age: 0.1,
     valid: true,

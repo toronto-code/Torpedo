@@ -122,7 +122,17 @@ export class ContactClassifier {
     const tsSigma = features.impliedTsSigmaDb;
     const correlation = features.signatureCorrelation;
     const depthRate = features.depthRateMPerS;
-
+    // Uncertainty-aware kinematics: the speed estimate carries the filter's
+    // own velocity variance, so a young track (sigma of several m/s)
+    // classifies honestly-uncertain — every band softens — instead of
+    // snapping to whatever its noisy speed resembles. Classification
+    // sharpens as the solution matures, which is the honest behavior.
+    const speedVariance =
+      speed > 0.5
+        ? (estimate.velocity.x ** 2 * (estimate.covariance[2]?.[2] ?? 0) +
+            estimate.velocity.y ** 2 * (estimate.covariance[3]?.[3] ?? 0)) /
+          (speed * speed)
+        : (estimate.covariance[2]?.[2] ?? 0) + (estimate.covariance[3]?.[3] ?? 0);
     for (const cls of CLASSES) {
       if (cls === "unknown") continue;
       const band = BANDS[cls];
@@ -132,7 +142,12 @@ export class ContactClassifier {
           FEATURE_GAIN * gaussianLogLikelihood(impliedTs, band.tsCenter, band.tsSigma);
       }
       likelihood +=
-        FEATURE_GAIN * gaussianLogLikelihood(speed, band.speedCenter, band.speedSigma);
+        FEATURE_GAIN *
+        gaussianLogLikelihood(
+          speed,
+          band.speedCenter,
+          Math.sqrt(band.speedSigma ** 2 + speedVariance),
+        );
       // Biologics wander; commercial traffic runs straight.
       if (cls === "biological") likelihood += Math.min(1.5, meanWander * 6);
       if (cls === "surface-commercial") likelihood -= Math.min(1.5, meanWander * 6);
