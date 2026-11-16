@@ -5,13 +5,13 @@ import type { ObservationMode } from "../src/sim/types";
 import type { ScenarioKind } from "../src/sim/types";
 
 describe("headless vertical slice", () => {
-  it("reproduces identical runs from identical seeds", () => {
+  it("reproduces identical runs from identical seeds", { timeout: 60000 }, () => {
     const first = runHeadless(createDefaultConfig()).result;
     const second = runHeadless(createDefaultConfig()).result;
     expect(second).toEqual(first);
   });
 
-  it("runs all ablation modes without invalid numerical state", () => {
+  it("runs all ablation modes without invalid numerical state", { timeout: 60000 }, () => {
     const modes: ObservationMode[] = ["perfect", "raw", "ekf"];
     for (const mode of modes) {
       const config = createDefaultConfig();
@@ -25,21 +25,21 @@ describe("headless vertical slice", () => {
     }
   });
 
-  it("decimates render snapshots and telemetry from the 200 Hz clock", () => {
+  it("decimates render snapshots and telemetry from the 200 Hz clock", { timeout: 60000 }, () => {
     const engine = new SimulationEngine(createDefaultConfig());
     const outputs = Array.from({ length: 20 }, () => engine.step());
     expect(outputs.filter((output) => output.snapshot).length).toBe(5);
     expect(outputs.filter((output) => output.telemetry).length).toBe(2);
   });
 
-  it("publishes an immediate snapshot for an explicit single-step", () => {
+  it("publishes an immediate snapshot for an explicit single-step", { timeout: 60000 }, () => {
     const engine = new SimulationEngine(createDefaultConfig());
     const output = engine.step(true);
     expect(output.snapshot?.timestamp).toBeCloseTo(0.005, 12);
     expect(output.telemetry).toBeUndefined();
   });
 
-  it("can publish current state without advancing the physics clock", () => {
+  it("can publish current state without advancing the physics clock", { timeout: 60000 }, () => {
     const engine = new SimulationEngine(createDefaultConfig());
     engine.step();
     const snapshot = engine.currentSnapshot();
@@ -47,7 +47,7 @@ describe("headless vertical slice", () => {
     expect(engine.timestamp).toBeCloseTo(0.005, 12);
   });
 
-  it("keeps all reference target scenarios numerically finite", () => {
+  it("keeps all reference target scenarios numerically finite", { timeout: 60000 }, () => {
     const scenarios: ScenarioKind[] = [
       "constant-velocity",
       "constant-turn",

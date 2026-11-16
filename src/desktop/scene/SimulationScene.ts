@@ -568,6 +568,10 @@ export class SimulationScene {
   private environment: THREE.Group;
   private readonly contactMeshes: ContactMeshPool;
   private readonly torpedoMarker: THREE.Sprite;
+  private readonly torpedoLabel: THREE.Sprite;
+  private readonly platform: THREE.Group = createVehicle(0x8fd4b8, false);
+  private readonly platformMarker: THREE.Sprite = createMarkerSprite(0x8fd4b8);
+  private readonly platformLabel: THREE.Sprite = createLabelSprite("platform");
   private readonly torpedoTrail: Trail;
   private readonly targetTrail: Trail;
   private readonly estimateTrail: Trail;
@@ -655,7 +659,14 @@ export class SimulationScene {
     this.perspective.position.set(-900, 700, -900);
     this.perspective.lookAt(0, -40, 0);
     this.torpedoMarker = createMarkerSprite(0x7cf7df);
-    this.scene.add(this.torpedoMarker);
+    this.torpedoLabel = createLabelSprite("weapon");
+    this.torpedoLabel.visible = false;
+    this.scene.add(this.torpedoMarker, this.torpedoLabel);
+    this.platform.scale.setScalar(1.6);
+    this.platform.visible = false;
+    this.platformMarker.visible = false;
+    this.platformLabel.visible = false;
+    this.scene.add(this.platform, this.platformMarker, this.platformLabel);
     this.renderer.domElement.addEventListener("dblclick", () => {
       if (this.options.cameraMode === "orbit") this.focusOrbit();
     });
@@ -975,6 +986,31 @@ export class SimulationScene {
     const contact = interpolateVehicleInto(this.previous.target, this.current.target, alpha, contactInterpolated);
     this.torpedo.position.copy(own.position);
     this.torpedo.quaternion.copy(own.orientation);
+    const platformState = this.current.platform;
+    if (platformState) {
+      toRenderPositionInto(platformState.position, scratchDesired);
+      this.platform.position.copy(scratchDesired);
+      this.platform.rotation.set(0, -platformState.heading, 0);
+      this.platformMarker.position.copy(scratchDesired);
+      this.platformLabel.position.copy(scratchDesired);
+      this.platform.visible = true;
+      this.platformMarker.visible = true;
+      this.platformLabel.visible = true;
+      const worldHeight = Math.max(
+        1,
+        2 *
+          this.perspective.position.distanceTo(scratchDesired) *
+          Math.tan((this.perspective.fov * Math.PI) / 360),
+      );
+      const markerSize = worldHeight * 0.03;
+      this.platformMarker.scale.set(markerSize, markerSize, 1);
+      const labelWidth = worldHeight * 0.12;
+      this.platformLabel.scale.set(labelWidth, labelWidth * 0.25, 1);
+    } else {
+      this.platform.visible = false;
+      this.platformMarker.visible = false;
+      this.platformLabel.visible = false;
+    }
     const truthContacts = this.current.contacts;
     if (truthContacts && truthContacts.length > 0) {
       this.target.visible = false;
@@ -1038,6 +1074,7 @@ export class SimulationScene {
 
   private updateTorpedoMarker(camera: THREE.Camera, position: THREE.Vector3): void {
     this.torpedoMarker.position.copy(position);
+    this.torpedoLabel.position.copy(position);
     const worldHeight =
       camera instanceof THREE.OrthographicCamera
         ? Math.max(1, camera.top - camera.bottom)
@@ -1049,5 +1086,8 @@ export class SimulationScene {
           );
     const size = worldHeight * 0.03;
     this.torpedoMarker.scale.set(size, size, 1);
+    const labelWidth = worldHeight * 0.12;
+    this.torpedoLabel.scale.set(labelWidth, labelWidth * 0.25, 1);
+    this.torpedoLabel.visible = true;
   }
 }

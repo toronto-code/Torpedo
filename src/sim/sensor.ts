@@ -159,8 +159,13 @@ export class SeekerModel {
     streams: {
       noise: SeededRandom;
       passive: SeededRandom;
+      depth?: SeededRandom | null;
     }[],
-    fallbackStreams: { noise: SeededRandom; passive: SeededRandom },
+    fallbackStreams: {
+      noise: SeededRandom;
+      passive: SeededRandom;
+      depth?: SeededRandom | null;
+    },
     countermeasures?: CountermeasureEffects,
   ): SensorSample[] | null {
     if (timestamp + 1e-10 < this.nextSampleTime) return null;
@@ -241,6 +246,15 @@ export class SeekerModel {
         acoustic: undefined,
         passiveSnrDb: snrDb,
       };
+      if (
+        stream.depth &&
+        this.config.depthSigmaM !== undefined
+      ) {
+        observation.targetDepth = Math.max(
+          0,
+          contact.state.depth + stream.depth.gaussian(0, this.config.depthSigmaM),
+        );
+      }
       return { status: "locked", observation, acoustic: bearingOnlyChannel };
     });
   }

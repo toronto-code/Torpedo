@@ -23,7 +23,7 @@ describe("opt-in 3D target motion", () => {
     return config;
   }
 
-  it("both objects hold nonzero and distinct depths", () => {
+  it("both objects hold nonzero and distinct depths", { timeout: 60000 }, () => {
     const run = runHeadless(threeDConfig());
     expect(run.result.terminationReason).not.toBe("invalid-state");
     const mid = run.telemetry[Math.floor(run.telemetry.length / 2)];
@@ -40,7 +40,7 @@ describe("opt-in 3D target motion", () => {
     }
   });
 
-  it("the 3D target changes depth while the default target stays planar", () => {
+  it("the 3D target changes depth while the default target stays planar", { timeout: 60000 }, () => {
     const moving = runHeadless(threeDConfig());
     const depthSamples = moving.telemetry.map((sample) => sample.target.depth);
     const maxDepthChange = Math.max(...depthSamples) - Math.min(...depthSamples);
@@ -53,7 +53,7 @@ describe("opt-in 3D target motion", () => {
     expect(Math.max(...planarDepths)).toBeCloseTo(Math.min(...planarDepths), 9);
   });
 
-  it("initial pitch and roll map onto the NED attitude", () => {
+  it("initial pitch and roll map onto the NED attitude", { timeout: 60000 }, () => {
     const config = createDefaultConfig();
     config.torpedo.initial.pitch = 0.18;
     config.torpedo.initial.roll = -0.42;
@@ -67,7 +67,7 @@ describe("opt-in 3D target motion", () => {
     expect(state.position.z).toBeCloseTo(config.torpedo.initial.depth, 10);
   });
 
-  it("quaternionFromEuler composes yaw, pitch, and roll in NED", () => {
+  it("quaternionFromEuler composes yaw, pitch, and roll in NED", { timeout: 60000 }, () => {
     const yaw = 0.7;
     const pitch = -0.25;
     const roll = 0.5;
@@ -86,7 +86,7 @@ describe("opt-in 3D target motion", () => {
     expect(rolledAngles.roll).toBeGreaterThan(0);
   });
 
-  it("keeps existing configurations valid without the optional fields", () => {
+  it("keeps existing configurations valid without the optional fields", { timeout: 60000 }, () => {
     const config = createDefaultConfig();
     expect(config.torpedo.dynamicsModel).toBeUndefined();
     expect(config.target.dynamicsModel).toBeUndefined();

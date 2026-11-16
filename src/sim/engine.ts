@@ -285,6 +285,9 @@ export class SimulationEngine {
         this.platformStreams = config.contacts.map((spec) => ({
           noise: new SeededRandom(deriveSeed(config.seed, `platform-noise-${spec.id}`)),
           passive: new SeededRandom(deriveSeed(config.seed, `platform-passive-${spec.id}`)),
+          depth: config.sensor.depthSigmaM !== undefined
+            ? new SeededRandom(deriveSeed(config.seed, `platform-depth-${spec.id}`))
+            : null,
         }));
         this.wireAttached = Boolean(config.weapon?.wireGuidance);
       }
@@ -715,19 +718,24 @@ export class SimulationEngine {
   private updatePlatform(): void {
     const platform = this.config.platform;
     if (!platform || !this.platformState || !this.platformDynamics) return;
-    // Own-ship legs: alternate course offset about the mean threat
-    // bearing so the platform's bearings-only picture stays observable.
+    // Crisp own-ship TMA legs: hold base heading +/- a solid offset,
+    // alternating each leg period, so the bearing history diversifies
+    // quickly (constant-rate ramps diversify far too slowly).
     const legPeriod = platform.legPeriodS ?? 30;
     const leg = Math.floor(this.timestamp / legPeriod) % 2 === 0 ? 1 : -1;
+    const desired = platform.vehicle.initial.heading + leg * 0.7;
+    const error = wrapAngle(desired - this.platformState.heading);
+    const maxRate = platform.vehicle.parameters.maxTurnRate;
     this.platformControl = {
       ...this.platformControl,
-      yawRateCommand: leg * 0.02,
+      yawRateCommand: clamp(0.12 * error, -maxRate, maxRate),
       speedCommand: platform.vehicle.commandedSpeed,
     };
-    this.platformState = this.platformDynamics.step(
-      this.dt,
+    this.platformState = this.platformDynamics.integrate(
       this.platformState,
       this.platformControl,
+      platform.vehicle,
+      this.dt,
     );
     if (!this.contactRuntimes || !this.platformSeeker) return;
 
@@ -952,7 +960,11 @@ export class SimulationEngine {
       this.weapon.speed?.searchSpeed !== undefined &&
       ((this.homing?.phase === "reacquisition") ||
         (this.weapon.sensorPolicy === "passive-midcourse" &&
-          !this.sensorActivated))
+          !this.sensorActivated &&
+          // A solo silent weapon stays quiet through the approach; a
+          // wire-guided weapon with a platform solution behind it closes
+          // at cruise once committed.
+          (!this.engagementAuthorized || this.weapon.wireGuidance !== true)))
     ) {
       return this.weapon.speed.searchSpeed;
     }
@@ -1072,12 +1084,19 @@ export class SimulationEngine {
             targetStrengthDb: 0,
             radiatedNoiseDb: runtime.spec.radiatedNoiseDb,
           }));
+        // The weapon's small array does not resolve depression angle —
+        // depth-bearing passive observations are the towed array's
+        // capability (the platform), not the seeker's.
+        const weaponPassiveStreams = this.contactStreams.map((stream) => ({
+          ...stream,
+          depth: null as SeededRandom | null,
+        }));
         const samples = this.seeker.samplePassive(
           this.timestamp,
           this.torpedo,
           radiating,
-          this.contactStreams,
-          { noise: new SeededRandom(0), passive: new SeededRandom(0) },
+          weaponPassiveStreams,
+          { noise: new SeededRandom(0), passive: new SeededRandom(0), depth: null },
           this.countermeasureEffects(),
         );
         if (samples) {
@@ -1210,6 +1229,7 @@ export class SimulationEngine {
         this.weapon.sensorPolicy === "passive-midcourse" && !this.sensorActivated
           ? "passive"
           : "active",
+      wireAttached: this.wireAttached || undefined,
       solutionSigmaM: (() => {
         const track = this.selectedTrack();
         if (!track) return null;
@@ -1292,6 +1312,7 @@ export class SimulationEngine {
       timestamp: this.timestamp,
       torpedo: this.torpedo,
       target: this.target,
+      platform: this.platformState ?? undefined,
       estimate: sample.estimate,
       observation: this.latestObservation,
       guidance: this.guidance,

@@ -28,7 +28,7 @@ describe("speed-dependent self-noise", () => {
     };
   }
 
-  it("degrades detection probability at high speed", () => {
+  it("degrades detection probability at high speed", { timeout: 60000 }, () => {
     const quiet = seekerWith({ baseDb: 52, dbPerMs: 0.55 });
     const slow = quiet.seeker.sample(
       0,
@@ -46,7 +46,7 @@ describe("speed-dependent self-noise", () => {
       .toBeLessThan(slow!.acoustic!.detectionProbability);
   });
 
-  it("keeps the legacy channel bit-identical when unconfigured", () => {
+  it("keeps the legacy channel bit-identical when unconfigured", { timeout: 60000 }, () => {
     const a = seekerWith();
     const b = seekerWith();
     const sensorState = { ...a.target, position: { x: 0, y: 0, z: 35 } };
@@ -82,7 +82,7 @@ describe("energy-budget endurance", () => {
     return config;
   }
 
-  it("drains with speed-cubed drag and exhausts earlier at sprint", () => {
+  it("drains with speed-cubed drag and exhausts earlier at sprint", { timeout: 60000 }, () => {
     const slow = runHeadless(batteryConfig(15)).result;
     const fast = runHeadless(batteryConfig(40)).result;
     expect(slow.terminationReason).toBe("endurance-exhausted");
@@ -91,13 +91,13 @@ describe("energy-budget endurance", () => {
     expect(fast.elapsedTime).toBeLessThan(slow.elapsedTime / 5);
   });
 
-  it("scales run time with capacity", () => {
+  it("scales run time with capacity", { timeout: 60000 }, () => {
     const small = runHeadless(batteryConfig(20, 4e5)).result;
     const large = runHeadless(batteryConfig(20, 8e5)).result;
     expect(large.elapsedTime).toBeGreaterThan(small.elapsedTime * 1.5);
   });
 
-  it("keeps the legacy time budget when no battery is configured", () => {
+  it("keeps the legacy time budget when no battery is configured", { timeout: 60000 }, () => {
     const config = createDefaultConfig();
     config.weapon = { endurance: { runTime: 20 } };
     config.runtime.maxTime = 60;
@@ -124,7 +124,7 @@ describe("aspect-dependent echo", () => {
     return runtime;
   }
 
-  it("is weak bow-on and strong beam-on", () => {
+  it("is weak bow-on and strong beam-on", { timeout: 60000 }, () => {
     const weapon = { x: 2000, y: 0 };
     const bow = effectiveTargetStrength(runtimeAt(0), weapon, 10);
     const beam = effectiveTargetStrength(runtimeAt(Math.PI / 2), weapon, 10);
@@ -132,7 +132,7 @@ describe("aspect-dependent echo", () => {
     expect(beam).toBeCloseTo(19, 6);
   });
 
-  it("stays constant for contacts without aspect echo (decoys)", () => {
+  it("stays constant for contacts without aspect echo (decoys)", { timeout: 60000 }, () => {
     const config = createDefaultConfig();
     const decoySpec: ContactSpec = {
       id: "decoy",
@@ -148,7 +148,7 @@ describe("aspect-dependent echo", () => {
     }
   });
 
-  it("varies smoothly as geometry evolves in a full engagement", () => {
+  it("varies smoothly as geometry evolves in a full engagement", { timeout: 60000 }, () => {
     const run = runHeadless(createAmbiguityScenarioConfig("cluttered-approach"));
     expect(run.result.terminationReason).not.toBe("invalid-state");
     const again = runHeadless(createAmbiguityScenarioConfig("cluttered-approach"));

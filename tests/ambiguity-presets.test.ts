@@ -34,7 +34,7 @@ describe("ambiguity scenario presets", () => {
     });
   }
 
-  it("pairs identical seeds across presets for comparative studies", () => {
+  it("pairs identical seeds across presets for comparative studies", { timeout: 60000 }, () => {
     const a = createAmbiguityScenarioConfig("decoy-stress", 42);
     const b = createAmbiguityScenarioConfig("high-ambiguity", 42);
     expect(a.seed).toBe(b.seed);

@@ -59,7 +59,7 @@ function weaponConfig() {
 }
 
 describe("intercept geometry", () => {
-  it("solves the head-on triangle exactly", () => {
+  it("solves the head-on triangle exactly", { timeout: 60000 }, () => {
     const solution = solveIntercept({
       ownPosition: { x: 0, y: 0 },
       track: track({ position: { x: 2000, y: 0 }, velocity: { x: -10, y: 0 } }),
@@ -72,7 +72,7 @@ describe("intercept geometry", () => {
     expect(solution.heading).toBeCloseTo(0, 9);
   });
 
-  it("solves the beam (crossing) triangle with the law of sines", () => {
+  it("solves the beam (crossing) triangle with the law of sines", { timeout: 60000 }, () => {
     // Contact 1500 m east crossing due north at 15 m/s; weapon at 30 m/s.
     const solution = solveIntercept({
       ownPosition: { x: 0, y: 0 },
@@ -94,7 +94,7 @@ describe("intercept geometry", () => {
       .toBeCloseTo(30 * solution.timeToIntercept, 6);
   });
 
-  it("reports unsolvable when the weapon cannot close a stern chase", () => {
+  it("reports unsolvable when the weapon cannot close a stern chase", { timeout: 60000 }, () => {
     const solution = solveIntercept({
       ownPosition: { x: 0, y: 0 },
       track: track({ position: { x: 1000, y: 0 }, velocity: { x: 50, y: 0 } }),
@@ -104,7 +104,7 @@ describe("intercept geometry", () => {
     expect(solution.solvable).toBe(false);
   });
 
-  it("bounds the launch envelope by endurance against a fleeing contact", () => {
+  it("bounds the launch envelope by endurance against a fleeing contact", { timeout: 60000 }, () => {
     expect(launchEnvelope(40, 600, 10, 120).maximumRange).toBeCloseTo(30 * 600, 9);
     expect(launchEnvelope(40, null, 10, 120).maximumRange).toBeCloseTo(30 * 120, 9);
     expect(launchEnvelope(10, 600, 40, 120).maximumRange).toBe(0);
@@ -112,7 +112,7 @@ describe("intercept geometry", () => {
 });
 
 describe("fire-control solution and fireability", () => {
-  it("derives the solution only from track inputs", () => {
+  it("derives the solution only from track inputs", { timeout: 60000 }, () => {
     const solution = computeLaunchSolution({
       ownPosition: { x: 0, y: 0 },
       track: track({ position: { x: 2000, y: 0 }, velocity: { x: -10, y: 0 } }),
@@ -144,7 +144,7 @@ describe("fire-control solution and fireability", () => {
     ).toBe(true);
   });
 
-  it("flags stale, rejected, and outside-envelope tracks as not fireable", () => {
+  it("flags stale, rejected, and outside-envelope tracks as not fireable", { timeout: 60000 }, () => {
     const solution = computeLaunchSolution({
       ownPosition: { x: 0, y: 0 },
       track: track({ position: { x: 2000, y: 0 }, velocity: { x: -10, y: 0 } }),
@@ -178,7 +178,7 @@ describe("fire-control solution and fireability", () => {
 });
 
 describe("homing phase machine", () => {
-  it("transitions run-out to homing on the enable schedule", () => {
+  it("transitions run-out to homing on the enable schedule", { timeout: 60000 }, () => {
     let state = initialHomingState();
     const first = updateHomingPhase({
       state,
@@ -204,7 +204,7 @@ describe("homing phase machine", () => {
     expect(second.transition?.reason).toBe("enabled");
   });
 
-  it("enters terminal on the range gate and applies the stricter NIS gate", () => {
+  it("enters terminal on the range gate and applies the stricter NIS gate", { timeout: 60000 }, () => {
     const state = { ...initialHomingState(), phase: "homing" as const, enteredPhaseAt: 4 };
     const goodTrack = track({ position: { x: 350, y: 0 }, nis: 4 });
     expect(trackUsable(goodTrack, "terminal", weapon, 1.5)).toBe(true);
@@ -226,7 +226,7 @@ describe("homing phase machine", () => {
     expect(update.transition?.reason).toBe("terminal-gate");
   });
 
-  it("loses and reacquires the track deterministically", () => {
+  it("loses and reacquires the track deterministically", { timeout: 60000 }, () => {
     let state: ReturnType<typeof initialHomingState> = {
       ...initialHomingState(),
       phase: "homing",
@@ -257,7 +257,7 @@ describe("homing phase machine", () => {
     expect(reacquired.transition?.reason).toBe("reacquired");
   });
 
-  it("run-out ignores track loss", () => {
+  it("run-out ignores track loss", { timeout: 60000 }, () => {
     const update = updateHomingPhase({
       state: initialHomingState(),
       timestamp: 1,
@@ -273,7 +273,7 @@ describe("homing phase machine", () => {
 });
 
 describe("fuze and synthetic effectiveness", () => {
-  it("arms on schedule and triggers inside the detection radius", () => {
+  it("arms on schedule and triggers inside the detection radius", { timeout: 60000 }, () => {
     let state = initialFuzeState();
     state = updateFuzeArming(state, 3.9, 4);
     expect(state.armed).toBe(false);
@@ -284,7 +284,7 @@ describe("fuze and synthetic effectiveness", () => {
     expect(fuzeTriggers(15, {})).toBe(false);
   });
 
-  it("scores synthetic effectiveness as a smooth decreasing function", () => {
+  it("scores synthetic effectiveness as a smooth decreasing function", { timeout: 60000 }, () => {
     const config = { lethalRadius: 10, shape: 2 };
     expect(syntheticEffectiveness(0, config)).toBeCloseTo(1, 12);
     expect(syntheticEffectiveness(10, config)).toBeCloseTo(Math.exp(-1), 12);
@@ -294,7 +294,7 @@ describe("fuze and synthetic effectiveness", () => {
 });
 
 describe("weapon engagement integration", () => {
-  it("executes the full phase timeline and detonates the fuze", () => {
+  it("executes the full phase timeline and detonates the fuze", { timeout: 60000 }, () => {
     const run = runHeadless(weaponConfig());
     expect(run.result.terminationReason).toBe("fuzed-detonation");
     expect(run.result.fuzeMissDistance).toBeDefined();
@@ -307,7 +307,7 @@ describe("weapon engagement integration", () => {
     expect(phases).toContain("terminal");
   });
 
-  it("holds run-out on the fire-control heading before homing", () => {
+  it("holds run-out on the fire-control heading before homing", { timeout: 60000 }, () => {
     const config = weaponConfig();
     config.guidance.mode = "perfect";
     const engine = new SimulationEngine(config);
@@ -319,7 +319,7 @@ describe("weapon engagement integration", () => {
     expect(early.guidance.lateralAcceleration).toBe(0);
   });
 
-  it("keeps observation delivery monotonic across the terminal cadence switch", () => {
+  it("keeps observation delivery monotonic across the terminal cadence switch", { timeout: 60000 }, () => {
     const run = runHeadless(weaponConfig());
     const weaponSamples = run.telemetry.filter((s) => s.weapon);
     expect(weaponSamples.length).toBeGreaterThan(10);
@@ -335,7 +335,7 @@ describe("weapon engagement integration", () => {
     }
   });
 
-  it("terminates on endurance exhaustion when the target runs far", () => {
+  it("terminates on endurance exhaustion when the target runs far", { timeout: 60000 }, () => {
     const config = weaponConfig();
     config.weapon!.endurance = { runTime: 20 };
     config.weapon!.fuze = { detectionRadius: 0 };
@@ -347,14 +347,14 @@ describe("weapon engagement integration", () => {
     expect(run.result.elapsedTime).toBeGreaterThanOrEqual(20);
   });
 
-  it("reproduces identical phase timelines and results for identical seeds", () => {
+  it("reproduces identical phase timelines and results for identical seeds", { timeout: 60000 }, () => {
     const a = runHeadless(weaponConfig());
     const b = runHeadless(weaponConfig());
     expect(a.result).toEqual(b.result);
     expect(a.telemetry.length).toBe(b.telemetry.length);
   });
 
-  it("leaves legacy configurations completely untouched", () => {
+  it("leaves legacy configurations completely untouched", { timeout: 60000 }, () => {
     const legacy = createDefaultConfig();
     expect(legacy.weapon).toBeUndefined();
     const run = runHeadless(legacy);

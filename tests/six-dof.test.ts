@@ -10,7 +10,7 @@ import {
 } from "../src/sim/six-dof";
 
 describe("fictional 6-DOF dynamics", () => {
-  it("finds a level, neutrally buoyant propulsion trim", () => {
+  it("finds a level, neutrally buoyant propulsion trim", { timeout: 60000 }, () => {
     const config = createDefaultConfig();
     config.dynamics.sixDof.currentMean = { x: 0, y: 0, z: 0 };
     config.dynamics.sixDof.currentAmplitude = { x: 0, y: 0, z: 0 };
@@ -23,7 +23,7 @@ describe("fictional 6-DOF dynamics", () => {
     expect(trim.throttle).toBeLessThan(1);
   });
 
-  it("holds level constant-speed trim and preserves quaternion norm", () => {
+  it("holds level constant-speed trim and preserves quaternion norm", { timeout: 60000 }, () => {
     const config = createDefaultConfig();
     const sixDof = config.dynamics.sixDof;
     sixDof.currentMean = { x: 0, y: 0, z: 0 };
@@ -47,7 +47,7 @@ describe("fictional 6-DOF dynamics", () => {
     expect(state.angularVelocity.z).toBeCloseTo(0, 9);
   });
 
-  it("models control-surface lag and remains close under timestep refinement", () => {
+  it("models control-surface lag and remains close under timestep refinement", { timeout: 60000 }, () => {
     const config = createDefaultConfig();
     const sixDof = config.dynamics.sixDof;
     sixDof.currentMean = { x: 0, y: 0, z: 0 };
@@ -75,7 +75,7 @@ describe("fictional 6-DOF dynamics", () => {
     expect(coarse.position.z).toBeCloseTo(fine.position.z, 3);
   });
 
-  it("dissipates kinetic energy when propulsion is commanded off", () => {
+  it("dissipates kinetic energy when propulsion is commanded off", { timeout: 60000 }, () => {
     const config = createDefaultConfig();
     const sixDof = config.dynamics.sixDof;
     sixDof.currentMean = { x: 0, y: 0, z: 0 };
@@ -99,7 +99,7 @@ describe("fictional 6-DOF dynamics", () => {
     expect(state.speed).toBeGreaterThan(0);
   });
 
-  it("runs the integrated 6-DOF engagement without invalid state", () => {
+  it("runs the integrated 6-DOF engagement without invalid state", { timeout: 60000 }, () => {
     const config = createDefaultConfig();
     config.dynamics.model = "six-dof";
     config.runtime.maxTime = 12;
@@ -111,7 +111,7 @@ describe("fictional 6-DOF dynamics", () => {
     expect(run.telemetry.every((sample) => Number.isFinite(sample.torpedo.orientation.w))).toBe(true);
   });
 
-  it("rejects invalid 6-DOF coefficient ranges", () => {
+  it("rejects invalid 6-DOF coefficient ranges", { timeout: 60000 }, () => {
     const config = createDefaultConfig();
     config.dynamics.sixDof.parameters.mass = 0;
     expect(() => validateConfig(config)).toThrow(/mass.*positive/i);

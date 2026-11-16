@@ -114,3 +114,25 @@ describe("jammer and occluding screen", () => {
     expect(deployments).toContain("knuckle");
   }, 120000);
 });
+
+describe("launch platform and wire guidance", () => {
+  it("runs the platform pipeline: transient, authorization, wire cut, kill", () => {
+    const config = createAmbiguityScenarioConfig("wire-guided", 20260817);
+    expect(config.platform).toBeDefined();
+    expect(config.weapon!.wireGuidance).toBe(true);
+    const run = runHeadless(config);
+    const result = run.result;
+    // Authorization happened (the platform's doctrine fired) and the wire
+    // cut at seeker activation.
+    expect(result.tewaEvents?.some((e) => e.stage === "authorize")).toBe(true);
+    expect(
+      result.phaseTimeline?.some((p) => p.reason.includes("wire cut")),
+    ).toBe(true);
+    // The launch transient is loud: it is modeled during the first seconds.
+    expect(config.platform!.transientDb).toBeGreaterThan(10);
+    // Deterministic per seed.
+    const again = runHeadless(config).result;
+    expect(again.engagementOutcome).toEqual(result.engagementOutcome);
+    expect(again.fuzeMissDistance).toEqual(result.fuzeMissDistance);
+  }, 120000);
+});

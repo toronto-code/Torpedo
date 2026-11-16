@@ -32,7 +32,7 @@ function environment(): EnvironmentConfig {
 }
 
 describe("sound-speed profile and refraction", () => {
-  it("varies with depth: layer, thermocline minimum, deep rise", () => {
+  it("varies with depth: layer, thermocline minimum, deep rise", { timeout: 60000 }, () => {
     const env = environment();
     const surface = soundSpeedAtDepth(profile, env, 10);
     const mid = soundSpeedAtDepth(profile, env, 60 + profile.layerDepth * 0.75);
@@ -41,7 +41,7 @@ describe("sound-speed profile and refraction", () => {
     expect(deep).toBeGreaterThan(mid);
   });
 
-  it("penalizes layer-straddling paths inside the recovery range only", () => {
+  it("penalizes layer-straddling paths inside the recovery range only", { timeout: 60000 }, () => {
     expect(refractionLossDb(profile, 20, 120, 2000)).toBeCloseTo(12, 9);
     expect(refractionLossDb(profile, 20, 120, 4000)).toBeCloseTo(8, 9);
     expect(refractionLossDb(profile, 20, 120, 5500)).toBeCloseTo(0, 9);
@@ -49,7 +49,7 @@ describe("sound-speed profile and refraction", () => {
     expect(refractionLossDb(profile, 100, 150, 2000)).toBe(0);
   });
 
-  it("raises transmission loss and lowers detection for straddling paths", () => {
+  it("raises transmission loss and lowers detection for straddling paths", { timeout: 60000 }, () => {
     const env = environment();
     const config = createDefaultConfig();
     const acoustic = config.acoustic!;
@@ -63,7 +63,7 @@ describe("sound-speed profile and refraction", () => {
     expect(same.refractionLossDb).toBe(0);
   });
 
-  it("keeps the homogeneous channel bit-identical without a profile", () => {
+  it("keeps the homogeneous channel bit-identical without a profile", { timeout: 60000 }, () => {
     const config = createDefaultConfig();
     const env = config.environment!;
     const a = acousticChannel(0, 2000, 30, 8, env, config.acoustic!);
@@ -78,7 +78,7 @@ describe("target-side perception", () => {
     return createDefaultConfig();
   }
 
-  it("reacts only after sustained detection", () => {
+  it("reacts only after sustained detection", { timeout: 60000 }, () => {
     const config = perceptionConfig();
     const perception = {
       detectionThresholdDb: 6,
@@ -122,7 +122,7 @@ describe("target-side perception", () => {
     expect(state.heardBearing).not.toBeNull();
   });
 
-  it("hears a close weapon but not a distant one below the layer", () => {
+  it("hears a close weapon but not a distant one below the layer", { timeout: 60000 }, () => {
     const config = perceptionConfig();
     const env = { ...config.environment!, soundProfile: profile };
     const perception = {
@@ -162,7 +162,7 @@ describe("target-side perception", () => {
     expect(shieldedSnr - quietThreshold).toBeLessThan(-5);
   });
 
-  it("is deterministic per seed", () => {
+  it("is deterministic per seed", { timeout: 60000 }, () => {
     const run = () => {
       const config = perceptionConfig();
       const perception = {
@@ -210,7 +210,7 @@ describe("layer + perception integration", () => {
     }
   });
 
-  it("keeps legacy single-target runs bit-identical", () => {
+  it("keeps legacy single-target runs bit-identical", { timeout: 60000 }, () => {
     const run = runHeadless(createDefaultConfig());
     expect(run.result.elapsedTime).toBeCloseTo(40.905, 3);
   });

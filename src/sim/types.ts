@@ -621,6 +621,8 @@ export interface WeaponTelemetry {
   commandedSpeed: number;
   /** Current seeker employment ("passive" during a silent midcourse). */
   sensorMode?: "passive" | "active";
+  /** True while the launch platform steers the weapon over wire. */
+  wireAttached?: boolean;
   /** Designated track 2-sigma position uncertainty (m); the TMA solution
    *  quality. Null when no track is held. */
   solutionSigmaM?: number | null;

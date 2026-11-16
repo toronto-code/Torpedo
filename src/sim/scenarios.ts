@@ -15,6 +15,7 @@ export type AmbiguityPreset =
   | "decoy-stress"
   | "ambiguous-fluctuator"
   | "silent-approach"
+  | "wire-guided"
   | "high-ambiguity";
 
 function contactVehicle(
@@ -288,6 +289,63 @@ export function createAmbiguityScenarioConfig(
       // Passive classification is honestly weaker (no echo, no TS feature,
       // no IFF marking): the solution gate carries the safety burden here.
       config.doctrine!.requiredConfidence = 0.45;
+      return config;
+    }
+    case "wire-guided": {
+      // The platform architecture: a launching submarine runs the passive
+      // fire-control problem (towed array, own-ship TMA legs), authorizes,
+      // and steers the weapon over wire. The launch transient is loud —
+      // the target knows something is in the water almost immediately.
+      config.contacts = [
+        hostile(Math.PI - 0.35),
+        {
+          id: "freighter",
+          kind: "commercial-surface",
+          vehicle: vehicle(600, -1500, 1.2, 12, 0.5),
+          targetStrengthDb: 22,
+          radiatedNoiseDb: 165,
+          behavior: { kind: "constant-velocity" },
+        },
+        {
+          id: "whale",
+          kind: "biological",
+          vehicle: vehicle(900, 900, 2.4, 1.6, 4),
+          targetStrengthDb: -8,
+          radiatedNoiseDb: 148,
+          behavior: { kind: "biologic-wander", amplitude: 0.8, period: 35 },
+        },
+      ];
+      const platformVehicle = structuredClone(config.torpedo);
+      platformVehicle.initial = {
+        position: { x: -150, y: -250, z: 60 },
+        heading: Math.PI - 0.35,
+        speed: 8,
+        depth: 60,
+      };
+      platformVehicle.parameters = {
+        ...platformVehicle.parameters,
+        maxSpeed: 12,
+        maxTurnRate: 0.06,
+      };
+      platformVehicle.commandedSpeed = 8;
+      platformVehicle.commandedDepth = 60;
+      config.platform = {
+        vehicle: platformVehicle,
+        radiatedNoiseDb: 128,
+        transientS: 6,
+        transientDb: 22,
+        bearingSigmaScale: 0.6,
+        cadenceHz: 2,
+        legPeriodS: 30,
+      };
+      config.weapon!.sensorPolicy = "passive-midcourse";
+      config.weapon!.wireGuidance = true;
+      config.weapon!.radiatedNoise = { baseDb: 130, dbPerMs: 0.8 };
+      config.estimator.accelerationNoise = 0.3;
+      config.doctrine!.maxSolutionSigmaM = 700;
+      config.doctrine!.postAuthDesignationAgeS = 5;
+      config.doctrine!.requiredConfidence = 0.45;
+      config.runtime.maxTime = 260;
       return config;
     }
     case "high-ambiguity":
