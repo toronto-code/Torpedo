@@ -196,6 +196,28 @@ export interface EffectivenessConfig {
   shape?: number;
 }
 
+/** Launch platform (truth side): a submarine that carries the weapon,
+ *  runs its own passive fire-control pipeline, and steers the weapon over
+ *  wire during the midcourse. Absent platform keeps the weapon-centric
+ *  architecture exactly. */
+export interface PlatformConfig {
+  vehicle: VehicleConfig;
+  /** Radiated noise of the platform cruise (dB); also the base for the
+   *  launch transient heard by perceiving contacts. */
+  radiatedNoiseDb?: number;
+  /** Launch transient: seconds above the cruise level at launch. */
+  transientS?: number;
+  /** Extra dB of the launch transient over the cruise level. */
+  transientDb?: number;
+  /** Towed-array bearing resolution factor vs the weapon seeker (e.g.
+   *  0.6 = 40% tighter bearings). */
+  bearingSigmaScale?: number;
+  /** Passive ping cadence (Hz). */
+  cadenceHz?: number;
+  /** Own-ship TMA leg period (s); zero holds course. */
+  legPeriodS?: number;
+}
+
 /**
  * Optional phased-weapon engagement configuration. Absent block keeps the
  * legacy continuous-guidance behavior bit-identical: termination stays the
@@ -211,6 +233,10 @@ export interface WeaponSystemConfig {
   /** Seeker employment: active from launch (default), or a silent passive
    *  midcourse that goes active only when the terminal phase begins. */
   sensorPolicy?: "active" | "passive-midcourse";
+  /** Wire guidance: the weapon consumes the launch platform's track
+   *  picture (designated estimate + authorization) until the wire is cut
+   *  at terminal activation, after which its own seeker is sovereign. */
+  wireGuidance?: boolean;
   /** Radiated noise of the weapon itself (truth side): a target with
    *  perception hears this instead of pings while the seeker is passive.
    *  Sprinting loudly advertises; quiet search speed stays stealthy. */
@@ -460,6 +486,7 @@ export interface SimulationConfig {
   /** Multi-contact scene. Absent keeps the single-`target` legacy engagement
    *  bit-identical. */
   contacts?: ContactSpec[];
+  platform?: PlatformConfig;
   doctrine?: DoctrineConfig;
   weapon?: WeaponSystemConfig;
   environment?: EnvironmentConfig;
@@ -637,6 +664,8 @@ export interface RenderSnapshot {
   weapon?: WeaponTelemetry;
   contacts?: ContactTruth[];
   engagement?: EngagementTelemetry;
+  /** Launch platform state; present only with a platform block. */
+  platform?: VehicleState;
   acoustic?: AcousticChannelState | null;
 }
 

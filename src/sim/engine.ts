@@ -163,6 +163,24 @@ export class SimulationEngine {
   private heldDepthTarget: number | null = null;
   // True once a passive-midcourse seeker has gone active (terminal entry).
   private sensorActivated = false;
+  // Launch platform pipeline (null keeps the weapon-centric architecture).
+  private platformState: VehicleState | null = null;
+  private platformDynamics: VehicleDynamics | null = null;
+  private platformControl: VehicleControl = {
+    yawRateCommand: 0,
+    depthRateCommand: 0,
+    speedCommand: 0,
+  };
+  private platformSeeker: SeekerModel | null = null;
+  private platformTracker: MultiTargetTracker | null = null;
+  private platformClassifier = new ContactClassifier();
+  private platformTewa: TewaState | null = null;
+  private platformStreams: {
+    noise: SeededRandom;
+    passive: SeededRandom;
+  }[] = [];
+  private platformPending: import("./types").SensorObservation[] = [];
+  private wireAttached = false;
 
   constructor(readonly config: SimulationConfig) {
     validateConfig(config);
@@ -223,6 +241,53 @@ export class SimulationEngine {
       this.perceptionIndices = config.contacts
         .map((spec, index) => (spec.perception ? index : -1))
         .filter((index) => index >= 0);
+      if (config.platform) {
+        this.platformDynamics = createVehicleDynamics(
+          config.platform.vehicle.dynamicsModel ?? "planar-2.5d",
+          config.dynamics.sixDof,
+        );
+        this.platformState = this.platformDynamics.initialize(
+          config.platform.vehicle,
+        );
+        this.platformControl = {
+          yawRateCommand: 0,
+          depthRateCommand: 0,
+          speedCommand: config.platform.vehicle.commandedSpeed,
+        };
+        const platformSensor = {
+          ...config.sensor,
+          bearingSigma: config.sensor.bearingSigma *
+            (config.platform.bearingSigmaScale ?? 1),
+          cadenceHz: config.platform.cadenceHz ?? 2,
+          fovHalfAngle: Math.PI, // omnidirectional towed array
+          minRange: 0,
+          maxRange: Math.max(config.sensor.maxRange, 6000),
+        };
+        this.platformSeeker = new SeekerModel(
+          platformSensor,
+          new SeededRandom(deriveSeed(config.seed, "platform-noise")),
+          new SeededRandom(deriveSeed(config.seed, "platform-dropout")),
+          config.environment,
+          config.acoustic,
+        );
+        if (config.guidance.mode === "ekf" || config.guidance.mode === "raw") {
+          this.platformTracker = new MultiTargetTracker(
+            {
+              estimator: config.estimator,
+              confirmationCount: 5,
+              tentativeTimeout: 2.5,
+              deletionTimeout: 6,
+            },
+            config.guidance.mode,
+          );
+        }
+        this.platformTewa = initialTewaState();
+        this.platformStreams = config.contacts.map((spec) => ({
+          noise: new SeededRandom(deriveSeed(config.seed, `platform-noise-${spec.id}`)),
+          passive: new SeededRandom(deriveSeed(config.seed, `platform-passive-${spec.id}`)),
+        }));
+        this.wireAttached = Boolean(config.weapon?.wireGuidance);
+      }
       const primary =
         this.designatedContactRuntime() ?? this.primaryContactRuntime();
       if (primary) this.target = primary.state;
@@ -296,6 +361,16 @@ export class SimulationEngine {
   }
 
   private selectedTrack(): TrackEstimate | null {
+    if (this.wireAttached && this.platformTracker && this.platformTewa) {
+      const designation = this.platformTewa.designation;
+      if (designation) {
+        return this.platformTracker.estimateForTrack(
+          this.timestamp,
+          designation.trackId,
+        );
+      }
+      return null;
+    }
     if (this.contactRuntimes) {
       const designation = this.tewa.designation;
       if (!designation) return null;
@@ -409,6 +484,7 @@ export class SimulationEngine {
   }
 
   get engagementAuthorized(): boolean {
+    if (this.platformTewa?.authorized) return true;
     return this.contactRuntimes === null || this.tewa.authorized;
   }
 
@@ -620,7 +696,100 @@ export class SimulationEngine {
     return this.config.estimator.staleAfter + deliveryDelay;
   }
 
-  /** Ends a passive midcourse: the seeker goes active from here on. A
+  /** Launch-transient level heard at perceiving contacts during the
+   *  ejection window (dB); null outside it. Shooting is loud. */
+  private launchTransientLevelDb(): number | null {
+    const platform = this.config.platform;
+    if (!platform?.radiatedNoiseDb) return null;
+    const duration = platform.transientS ?? 6;
+    if (this.timestamp > duration) return null;
+    return platform.radiatedNoiseDb + (platform.transientDb ?? 20);
+  }
+
+  /**
+   * Launch-platform tick: own-ship TMA legs, passive towed-array pings,
+   * its own MHT tracker / classifier / TEWA. The platform is truth-side
+   * hardware feeding itself — its picture crosses to the weapon only
+   * through the wire (selectedTrack override while attached).
+   */
+  private updatePlatform(): void {
+    const platform = this.config.platform;
+    if (!platform || !this.platformState || !this.platformDynamics) return;
+    // Own-ship legs: alternate course offset about the mean threat
+    // bearing so the platform's bearings-only picture stays observable.
+    const legPeriod = platform.legPeriodS ?? 30;
+    const leg = Math.floor(this.timestamp / legPeriod) % 2 === 0 ? 1 : -1;
+    this.platformControl = {
+      ...this.platformControl,
+      yawRateCommand: leg * 0.02,
+      speedCommand: platform.vehicle.commandedSpeed,
+    };
+    this.platformState = this.platformDynamics.step(
+      this.dt,
+      this.platformState,
+      this.platformControl,
+    );
+    if (!this.contactRuntimes || !this.platformSeeker) return;
+
+    // Passive ping on the platform cadence.
+    const radiating = this.contactRuntimes
+      .filter((runtime) => runtime.active)
+      .map((runtime) => ({
+        state: runtime.state,
+        targetStrengthDb: 0,
+        radiatedNoiseDb: runtime.spec.radiatedNoiseDb,
+      }));
+    const samples = this.platformSeeker.samplePassive(
+      this.timestamp,
+      this.platformState,
+      radiating,
+      this.platformStreams,
+      { noise: new SeededRandom(0), passive: new SeededRandom(0) },
+    );
+    if (samples) {
+      for (const sample of samples) {
+        if (sample.observation) this.platformPending.push(sample.observation);
+      }
+    }
+    while (
+      this.platformPending.length > 0 &&
+      this.platformPending[0].deliveredAt <= this.timestamp + 1e-10
+    ) {
+      const observation = this.platformPending.shift()!;
+      this.platformTracker?.process(this.timestamp, observation);
+    }
+    if (!this.platformTracker) return;
+    this.platformTracker.prune(this.timestamp);
+    const candidates: TewaCandidate[] = this.platformTracker
+      .liveTracks(this.timestamp)
+      .map((track) => ({
+        trackId: track.meta.id,
+        estimate: track.estimate,
+        quality: track.meta.quality,
+        depth: track.meta.depth,
+        createdAt: track.meta.createdAt,
+        classification: this.platformClassifier.update(
+          track.meta.id,
+          this.timestamp,
+          track.estimate,
+          track.meta.features,
+        ),
+      }));
+    if (this.platformTewa) {
+      this.platformTewa = updateTewa({
+        state: this.platformTewa,
+        now: this.timestamp,
+        candidates,
+        ownPosition: {
+          x: this.platformState.position.x,
+          y: this.platformState.position.y,
+        },
+        doctrine: this.config.doctrine ?? defaultDoctrine(),
+      });
+    }
+  }
+
+  /** Ends a passive midcourse: the seeker goes active from here on A
    *  weapon that has not been authorized stays silent — going active early
    *  alerts the target and abandons the approach's whole purpose. */
   private activateSeeker(reason: string): void {
@@ -1205,6 +1374,17 @@ export class SimulationEngine {
 
     const rangeBefore = horizontalRange(this.torpedo, this.target);
     const previousTorpedoPosition = this.torpedo.position;
+    this.updatePlatform();
+    if (this.wireAttached && this.sensorActivated) {
+      // Wire cut: the weapon's seeker went active; from here its own
+      // picture is sovereign.
+      this.wireAttached = false;
+      this.phaseTimeline.push({
+        phase: this.homing?.phase ?? "terminal",
+        startedAt: this.timestamp,
+        reason: "wire cut (seeker activation)",
+      });
+    }
     if (this.contactRuntimes && this.lastPingAt !== null) {
       this.lastPingAt = null;
       for (const index of this.perceptionIndices) {
@@ -1219,16 +1399,18 @@ export class SimulationEngine {
           environment: this.config.environment,
           acoustic: this.config.acoustic,
           random: this.contactStreams[index].perception!,
-          ...(this.weapon?.sensorPolicy === "passive-midcourse" &&
-          !this.sensorActivated
-            ? this.weapon.radiatedNoise
-              ? {
-                  overrideSourceLevelDb:
-                    this.weapon.radiatedNoise.baseDb +
-                    this.weapon.radiatedNoise.dbPerMs * this.torpedo.speed,
-                }
-              : { silent: true }
-            : {}),
+          ...(this.launchTransientLevelDb() !== null
+            ? { overrideSourceLevelDb: this.launchTransientLevelDb()! }
+            : this.weapon?.sensorPolicy === "passive-midcourse" &&
+                !this.sensorActivated
+              ? this.weapon.radiatedNoise
+                ? {
+                    overrideSourceLevelDb:
+                      this.weapon.radiatedNoise.baseDb +
+                      this.weapon.radiatedNoise.dbPerMs * this.torpedo.speed,
+                  }
+                : { silent: true }
+              : {}),
         });
       }
     }
