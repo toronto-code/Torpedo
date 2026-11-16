@@ -204,6 +204,7 @@ export function TelemetryPanel({ snapshot, config, events, eventDuration }: Prop
         <Evidence label="SOUND SPEED">{acoustic ? `${acoustic.soundSpeed.toFixed(1)} m/s` : "BYPASSED"}</Evidence>
         <Evidence label="ABSORPTION">{acoustic ? `${acoustic.absorptionDbPerKm.toFixed(3)} dB/km` : "—"}</Evidence>
         <Evidence label="ONE-WAY TL">{acoustic ? `${acoustic.oneWayTransmissionLossDb.toFixed(2)} dB` : "—"}</Evidence>
+        <Evidence label="ARRIVAL">{acoustic?.arrival ? acoustic.arrival.toUpperCase() : "—"}</Evidence>
         <Evidence label="RECEIVED ECHO">{acoustic ? `${acoustic.receivedEchoLevelDb.toFixed(2)} dB` : "—"}</Evidence>
         <Evidence label="CHANNEL SNR">{acoustic ? `${acoustic.signalToNoiseDb.toFixed(2)} dB` : "—"}</Evidence>
         <Evidence label="PASSIVE SNR">{observation?.passiveSnrDb !== undefined && observation?.passiveSnrDb !== null ? `${observation.passiveSnrDb.toFixed(2)} dB` : "—"}</Evidence>

@@ -68,6 +68,9 @@ export function createAmbiguityScenarioConfig(
     recoveryRange: 3500,
     fadeWidth: 1500,
   };
+  // A hard seabed gives a bottom-bounce arrival that partly beats the
+  // layer shadow (steep crossings refract less).
+  config.environment.bottomBounce = { reflectionLossDb: 6, layerLossFactor: 0.35 };
   config.doctrine = defaultDoctrine();
   // Picture-development window: no autonomous authorization on a track
   // younger than 20 s, so classification evidence (dive behavior, echo

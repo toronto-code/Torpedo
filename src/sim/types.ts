@@ -325,6 +325,14 @@ export interface SensorConfig {
   depthSigmaM?: number;
 }
 
+export interface BottomBounceConfig {
+  /** Reflection loss at the seabed (dB, single bounce). */
+  reflectionLossDb: number;
+  /** Fraction of the layer-straddle loss applied to the bottom path
+   *  (steep crossings bend less; e.g. 0.25). */
+  layerLossFactor: number;
+}
+
 export interface EnvironmentConfig {
   temperatureC: number;
   salinityPsu: number;
@@ -333,6 +341,10 @@ export interface EnvironmentConfig {
   /** Optional depth-dependent sound-speed profile with simplified
    *  refraction shadowing. Absent keeps the homogeneous-water channel. */
   soundProfile?: SoundProfileConfig;
+  /** Optional bottom-bounce propagation: a second, longer arrival via a
+   *  single seabed reflection that partly beats the layer shadow. Absent
+   *  keeps the direct path only (bit-identical). */
+  bottomBounce?: BottomBounceConfig;
 }
 
 /** Synthetic piecewise profile: a mixed surface layer of near-constant
@@ -400,6 +412,9 @@ export interface AcousticChannelState {
   /** Extra one-way loss from refraction across the layer (dB), when a
    *  sound profile is configured. */
   refractionLossDb?: number;
+  /** Which arrival won the link budget ("direct" or "bottom-bounce");
+   *  direct-only channels report "direct". */
+  arrival?: "direct" | "bottom-bounce";
 }
 
 export interface EstimatorConfig {

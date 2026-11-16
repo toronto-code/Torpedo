@@ -109,10 +109,42 @@ export function acousticChannel(
     ? refractionLossDb(profile, sourceDepthM, receiverDepthM, range)
     : 0;
   const absorptionDbPerKm = thorpAbsorptionDbPerKm(acoustic.frequencyKhz);
-  const oneWayTransmissionLossDb =
+  const directLossDb =
     environment.spreadingCoefficient * Math.log10(range)
     + absorptionDbPerKm * range / 1000
     + refraction;
+
+  // Bottom-bounce arrival: source -> seabed -> receiver. The longer path
+  // pays extra spreading and a reflection loss, but crosses the layer
+  // steeply, where refraction steals far less — so it partly beats the
+  // shadow that blinds the direct path to a below-layer contact.
+  let oneWayTransmissionLossDb = directLossDb;
+  let pathLength = range;
+  let arrival: "direct" | "bottom-bounce" = "direct";
+  const bounce = environment.bottomBounce;
+  if (bounce) {
+    const drop = Math.max(
+      1,
+      2 * environment.waterDepth - sourceDepthM - receiverDepthM,
+    );
+    const bounceLength = Math.hypot(range, drop);
+    // The bottom path crosses the layer steeply: only a fraction of the
+    // straddle loss applies.
+    const bounceLayerLoss = profile
+      ? bounce.layerLossFactor *
+        refractionLossDb(profile, sourceDepthM, receiverDepthM, range)
+      : 0;
+    const bounceTotal =
+      environment.spreadingCoefficient * Math.log10(bounceLength)
+      + absorptionDbPerKm * bounceLength / 1000
+      + bounce.reflectionLossDb
+      + bounceLayerLoss;
+    if (bounceTotal < oneWayTransmissionLossDb) {
+      oneWayTransmissionLossDb = bounceTotal;
+      pathLength = bounceLength;
+      arrival = "bottom-bounce";
+    }
+  }
   const receivedEchoLevelDb =
     acoustic.sourceLevelDb
     - 2 * oneWayTransmissionLossDb
@@ -131,8 +163,9 @@ export function acousticChannel(
     receivedEchoLevelDb,
     signalToNoiseDb,
     detectionProbability,
-    propagationDelay: 2 * range / soundSpeed,
+    propagationDelay: 2 * pathLength / soundSpeed,
     ...(profile ? { refractionLossDb: refraction } : {}),
+    arrival,
   };
 }
 

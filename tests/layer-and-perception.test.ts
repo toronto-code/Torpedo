@@ -215,3 +215,50 @@ describe("layer + perception integration", () => {
     expect(run.result.elapsedTime).toBeCloseTo(40.905, 3);
   });
 });
+
+describe("bottom-bounce propagation", () => {
+  const acoustic = {
+    enabled: true,
+    frequencyKhz: 8,
+    sourceLevelDb: 210,
+    targetStrengthDb: 14,
+    ambientNoiseDb: 60,
+    receiverDirectivityIndexDb: 15,
+    detectionThresholdDb: 6,
+    detectionTransitionDb: 3,
+  };
+  const env = (bottomBounce?: { reflectionLossDb: number; layerLossFactor: number }) => ({
+    temperatureC: 12,
+    salinityPsu: 35,
+    waterDepth: 400,
+    spreadingCoefficient: 17,
+    soundProfile: {
+      layerDepth: 60,
+      thermoclineDrop: 20,
+      deepGradient: 0.017,
+      layerLossDb: 12,
+      recoveryRange: 3500,
+      fadeWidth: 1500,
+    },
+    ...(bottomBounce ? { bottomBounce } : {}),
+  });
+
+  it("picks the bottom path only when it beats the shadowed direct path", () => {
+    // Layer-straddled at mid-range: the bounce's steep crossing wins.
+    const shadowed = acousticChannel(0, 1500, 8, 130, env({ reflectionLossDb: 6, layerLossFactor: 0.35 }), acoustic as never);
+    expect(shadowed.arrival).toBe("bottom-bounce");
+    // Both below the layer: no shadow to beat, direct wins.
+    const clear = acousticChannel(0, 1500, 100, 130, env({ reflectionLossDb: 6, layerLossFactor: 0.35 }), acoustic as never);
+    expect(clear.arrival).toBe("direct");
+    // Without the config the channel stays direct-only.
+    const legacy = acousticChannel(0, 1500, 8, 130, env(), acoustic as never);
+    expect(legacy.arrival).toBe("direct");
+  });
+
+  it("uses the bounce path length for the propagation delay", () => {
+    const bounce = acousticChannel(0, 1500, 8, 130, env({ reflectionLossDb: 6, layerLossFactor: 0.35 }), acoustic as never);
+    const drop = 2 * 400 - 8 - 130;
+    const expected = (2 * Math.hypot(1500, drop)) / bounce.soundSpeed;
+    expect(bounce.propagationDelay).toBeCloseTo(expected, 6);
+  });
+});
