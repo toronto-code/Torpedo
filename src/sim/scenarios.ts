@@ -327,10 +327,12 @@ export function createAmbiguityScenarioConfig(
       };
       platformVehicle.parameters = {
         ...platformVehicle.parameters,
-        maxSpeed: 12,
-        maxTurnRate: 0.06,
+        maxSpeed: 18,
+        maxTurnRate: 0.08,
       };
-      platformVehicle.commandedSpeed = 8;
+      // Flank-speed TMA legs: the launch transient already announced the
+      // shot, and geometry separation is the platform's whole job.
+      platformVehicle.commandedSpeed = 14;
       platformVehicle.commandedDepth = 60;
       config.platform = {
         vehicle: platformVehicle,
@@ -348,7 +350,10 @@ export function createAmbiguityScenarioConfig(
       config.doctrine!.maxSolutionSigmaM = 700;
       config.doctrine!.postAuthDesignationAgeS = 5;
       config.doctrine!.requiredConfidence = 0.45;
-      config.runtime.maxTime = 260;
+      // Two-sensor triangulation converges in seconds, far faster than
+      // classification matures — hold fire until the picture does too.
+      config.doctrine!.minTrackAgeS = 25;
+      config.runtime.maxTime = 330;
       return config;
     }
     case "high-ambiguity":

@@ -181,6 +181,9 @@ export class SimulationEngine {
   }[] = [];
   private platformPending: import("./types").SensorObservation[] = [];
   private wireAttached = false;
+  // True when the weapon's own passive picture has a track near the
+  // platform's designated solution (two independent sensors consenting).
+  private wireCorroborated = false;
 
   constructor(readonly config: SimulationConfig) {
     validateConfig(config);
@@ -271,9 +274,19 @@ export class SimulationEngine {
           config.acoustic,
         );
         if (config.guidance.mode === "ekf" || config.guidance.mode === "raw") {
+          // The towed array's bearings are bearingSigmaScale times the
+          // seeker's, so its association gate tightens by the same factor:
+          // loud contacts on converging bearings merge far less readily.
+          const bearingScale = config.platform.bearingSigmaScale ?? 1;
           this.platformTracker = new MultiTargetTracker(
             {
-              estimator: config.estimator,
+              estimator: {
+                ...config.estimator,
+                innovationGate: Math.max(
+                  2,
+                  config.estimator.innovationGate * bearingScale,
+                ),
+              },
               confirmationCount: 5,
               tentativeTimeout: 2.5,
               deletionTimeout: 6,
@@ -487,7 +500,7 @@ export class SimulationEngine {
   }
 
   get engagementAuthorized(): boolean {
-    if (this.platformTewa?.authorized) return true;
+    if (this.platformTewa?.authorized && this.wireCorroborated) return true;
     return this.contactRuntimes === null || this.tewa.authorized;
   }
 
@@ -784,6 +797,30 @@ export class SimulationEngine {
         ),
       }));
     if (this.platformTewa) {
+      // Corroboration gate: the platform's designated solution must sit
+      // near a track in the weapon's own independent picture — a
+      // converged-wrong phantom fails this and the weapon keeps
+      // searching (or self-authorizes on its own proven doctrine).
+      const designation = this.platformTewa.designation;
+      this.wireCorroborated = false;
+      if (designation && this.platformTracker && this.tracker) {
+        const platformEstimate = this.platformTracker.estimateForTrack(
+          this.timestamp,
+          designation.trackId,
+        );
+        if (platformEstimate) {
+          for (const track of this.tracker.liveTracks(this.timestamp)) {
+            const separation = Math.hypot(
+              track.estimate.position.x - platformEstimate.position.x,
+              track.estimate.position.y - platformEstimate.position.y,
+            );
+            if (separation <= 600) {
+              this.wireCorroborated = true;
+              break;
+            }
+          }
+        }
+      }
       this.platformTewa = updateTewa({
         state: this.platformTewa,
         now: this.timestamp,
@@ -960,11 +997,7 @@ export class SimulationEngine {
       this.weapon.speed?.searchSpeed !== undefined &&
       ((this.homing?.phase === "reacquisition") ||
         (this.weapon.sensorPolicy === "passive-midcourse" &&
-          !this.sensorActivated &&
-          // A solo silent weapon stays quiet through the approach; a
-          // wire-guided weapon with a platform solution behind it closes
-          // at cruise once committed.
-          (!this.engagementAuthorized || this.weapon.wireGuidance !== true)))
+          !this.sensorActivated))
     ) {
       return this.weapon.speed.searchSpeed;
     }
