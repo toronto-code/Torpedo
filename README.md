@@ -1,12 +1,8 @@
 # Torpedo Guidance Simulator
 
-![Guidance Estimation Laboratory demo](assets/guidance-estimation-demo.gif)
 
-[Watch the 12-second H.264 demo](assets/guidance-estimation-demo.mp4) ·
-[View the full-resolution workstation frame](assets/guidance-estimation-demo-poster.png)
-
-An engineering portfolio project about **guidance and state estimation under
-sensor uncertainty**. The simulator is a native desktop application, not a hosted
+**guidance and state estimation under
+sensor uncertainty** project. The simulator is a native desktop application, not a hosted
 website. Its deterministic kernel provides selectable validated 2.5D and 6-DOF
 vehicle dynamics in **NED coordinates** (x = North, y = East, z = Down), with an
 optional published civilian BlueROV2 Heavy reference profile,
@@ -20,7 +16,6 @@ phases with reacquisition search, speed stages with an endurance budget, a
 proximity fuze, and a synthetic effectiveness score for benchmarking — all
 parameters fictional and uncalibrated (see `docs/weapon-model.md`).
 
-This repository does not model or claim correspondence to operational hardware.
 The default interactive experience opens the full 3D setup: 6-DOF dynamics,
 a water surface and seabed with a depth ruler, 3D trails, and an orbit camera
 (alongside chase, top-down, and seeker views). The original synthetic
@@ -101,41 +96,3 @@ source values, and remaining limitations are documented in
 
 All modes use identical scenario and sensor seeds for paired comparisons.
 
-## Project status
-
-- Complete architecture contracts and Worker protocol
-- Phase 1 headless vertical slice
-- Stage 2 paired Monte Carlo runner and statistical consistency reports
-- Phase 3 native Tauri + Three.js technical presentation
-- Stage 4 versioned replay, synchronized timeline scrubbing, and deterministic verification
-- Worker heartbeat supervision, bounded automatic recovery, and runtime profiling
-- Long-run numerical soak checks with finite-state containment
-- Phase 5 replaceable 6-DOF rigid-body model, trim solver, and current disturbances
-- Phase 6 paired 2.5D/6-DOF study with actuator-lag and authority isolation sweeps
-- NED coordinate kernel with a single Three.js conversion layer and golden
-  behavioral regression against the pre-migration kernel (planar runs
-  bit-identical, 6-DOF within floating-point round-off)
-- Phased weapon engagement: fire-control launch solutions on the delivered
-  track, run-out/homing/terminal phases, deterministic reacquisition, speed
-  stages, endurance budget, proximity fuze, and synthetic effectiveness
-  scoring (fictional constants; legacy configs bit-identical)
-- Paired weaponeering parameter sweep in the Analysis workspace and CLI
-- Multi-contact autonomous engagement: anonymous multi-return tracking,
-  observable-only classification with a synthetic IFF analog, doctrine
-  TEWA selection with manual/autonomous authorization, engagement
-  correctness scoring, ambiguity presets, and a paired decision study
-- Opt-in full 3D tracked-target motion behind per-vehicle dynamics selection
-- 3D environment: water surface, seabed at the configured depth, depth ruler,
-  exponential-fog perspective, and bounded allocation-free 3D trails
-- Orbit, Chase, Top Down, and Seeker cameras as render-only state
-- Native model controls, full-attitude rendering, fidelity analysis, and JSON/CSV exports
-- Deterministic reference configuration with verified MP4, GIF, and poster artifacts
-- Two-workspace engineering UI, tabular experiment manifests, synchronized plots, diagnostic geometry, and native exports
-- Measurement IDs and timestamps, latency provenance, innovation/gate status, and display-only track-quality states
-- Frozen configuration hashes, versioned event counts, qualification basis, and explicit synthetic-model boundary
-- Configurable synthetic acoustic environment with sound speed, absorption, link budget, detection probability, and propagation delay
-- Software-only simulated sensor/navigation stream with no hardware, live network, or external targeting interface
-- Raw, summary, histogram, empirical CDF, and JSON experiment exports
-- Numerical, sensor-distribution, EKF, guidance, determinism, NED-conversion,
-  trail, camera-isolation, and regression tests
-- No hosted website
