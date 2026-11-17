@@ -1,7 +1,7 @@
 # Torpedo Guidance Simulator
 
 
-**guidance and state estimation under
+**Guidance and state estimation under
 sensor uncertainty** project. The simulator is a native desktop application, not a hosted
 website. Its deterministic kernel provides selectable validated 2.5D and 6-DOF
 vehicle dynamics in **NED coordinates** (x = North, y = East, z = Down), with an
