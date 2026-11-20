@@ -184,6 +184,12 @@ export class SimulationEngine {
   // True when the weapon's own passive picture has a track near the
   // platform's designated solution (two independent sensors consenting).
   private wireCorroborated = false;
+  // True once the platform's designation has crossed the wire at least
+  // once; losing it afterwards cuts the wire.
+  private wireHadDesignation = false;
+  // When the wire solution stopped being corroborated (null = currently
+  // corroborated). Sustained disagreement cuts the wire.
+  private corroborationLostAt: number | null = null;
 
   constructor(readonly config: SimulationConfig) {
     validateConfig(config);
@@ -801,6 +807,10 @@ export class SimulationEngine {
       // near a track in the weapon's own independent picture — a
       // converged-wrong phantom fails this and the weapon keeps
       // searching (or self-authorizes on its own proven doctrine).
+      // Corroboration is CONTINUOUS: after release, sustained
+      // disagreement between the two pictures cuts the wire and hands
+      // the weapon to its own doctrine instead of enslaving it to a
+      // drifting relayed solution.
       const designation = this.platformTewa.designation;
       this.wireCorroborated = false;
       if (designation && this.platformTracker && this.tracker) {
@@ -821,6 +831,17 @@ export class SimulationEngine {
           }
         }
       }
+      if (this.wireCorroborated) {
+        this.corroborationLostAt = null;
+      } else if (this.corroborationLostAt === null) {
+        this.corroborationLostAt = this.timestamp;
+      } else if (
+        this.wireAttached &&
+        this.wireHadDesignation &&
+        this.timestamp - this.corroborationLostAt >= 15
+      ) {
+        this.cutWire("corroboration lost");
+      }
       this.platformTewa = updateTewa({
         state: this.platformTewa,
         now: this.timestamp,
@@ -832,6 +853,15 @@ export class SimulationEngine {
         doctrine: this.config.doctrine ?? defaultDoctrine(),
       });
     }
+  }
+
+  private cutWire(reason: string): void {
+    this.wireAttached = false;
+    this.phaseTimeline.push({
+      phase: this.homing?.phase ?? "homing",
+      startedAt: this.timestamp,
+      reason: `wire cut (${reason})`,
+    });
   }
 
   /** Ends a passive midcourse: the seeker goes active from here on A
@@ -1429,15 +1459,22 @@ export class SimulationEngine {
     const rangeBefore = horizontalRange(this.torpedo, this.target);
     const previousTorpedoPosition = this.torpedo.position;
     this.updatePlatform();
+    if (this.wireAttached && this.platformTewa?.designation) {
+      this.wireHadDesignation = true;
+    }
     if (this.wireAttached && this.sensorActivated) {
       // Wire cut: the weapon's seeker went active; from here its own
       // picture is sovereign.
-      this.wireAttached = false;
-      this.phaseTimeline.push({
-        phase: this.homing?.phase ?? "terminal",
-        startedAt: this.timestamp,
-        reason: "wire cut (seeker activation)",
-      });
+      this.cutWire("seeker activation");
+    } else if (
+      this.wireAttached &&
+      this.wireHadDesignation &&
+      !this.platformTewa?.designation
+    ) {
+      // The platform lost its solution mid-course. Without this cut the
+      // weapon would deadlock: activation waits on the relayed
+      // designation, which is gone. Release it to its own doctrine.
+      this.cutWire("platform solution lost");
     }
     if (this.contactRuntimes && this.lastPingAt !== null) {
       this.lastPingAt = null;
