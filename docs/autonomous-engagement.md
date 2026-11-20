@@ -64,3 +64,23 @@ Two weapon-side answers exist:
   the weapon slows to 18 m/s; with the self-noise model this genuinely
   lowers flow noise and widens the effective detection cone — search slow,
   sprint to kill.
+
+## Shots-to-kill: the sequential salvo study
+
+`npm run sim:salvo` answers the weaponeering question the single-weapon
+engine could not: how many weapons does a kill cost? The study fires a
+standard engagement; if the countermeasure suite seduces or defeats it,
+a follow-up is launched after a 90 s reload delay at the extrapolated
+survivor with its expendables depleted (decoys, knuckles, jammers, and
+screens decay far inside the delay) and the first shot's distraction
+discredited.
+
+The headline finding across ten seeds: the full countermeasure gauntlet
+(decoy-stress) costs ~1.4 weapons per kill with no survivors of two
+shots — while pure scene ambiguity (high-ambiguity) costs ~2.4, because
+ambiguity is not an expendable: a second shot re-runs the same
+classification lottery. **Ambiguity costs more shots than
+countermeasures.** Simultaneous multi-weapon engagements (allocation,
+shoot-shoot-look timing in one world) remain future engine work; the
+study's stated pessimism is that classification state does not persist
+across shots.
