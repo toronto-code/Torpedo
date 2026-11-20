@@ -8,9 +8,28 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  test:
+    name: JS gate (tests, build, lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      # Golden regression re-verification through the versioned replay path.
+      - run: node --import tsx scripts/run-headless.ts --compare
+      # Engagement study smoke test: the multi-contact chain must still
+      # authorize, engage, and score across preset variants.
+      - run: node --import tsx scripts/run-engagement-study.ts --runs 2
+
+  desktop:
+    name: Native shell (cargo check)
     runs-on: macos-14
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,10 +38,4 @@ jobs:
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
-      - run: npm test
       - run: npm run desktop:check
-      # Golden regression re-verification through the versioned replay path.
-      - run: node --import tsx scripts/run-headless.ts --compare
-      # Engagement study smoke test: the multi-contact chain must still
-      # authorize, engage, and score across preset variants.
-      - run: node --import tsx scripts/run-engagement-study.ts --runs 2

@@ -14,5 +14,18 @@ export default defineConfig({
     target: "safari13",
     sourcemap: true,
     chunkSizeWarningLimit: 800,
+    // Vendor chunks: the three.js renderer and React shell split from the
+    // application code so the sim bundle loads independently of either.
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes("node_modules/three")) return "three";
+          if (id.includes("node_modules/react") || id.includes("node_modules/scheduler")) {
+            return "react";
+          }
+          return undefined;
+        },
+      },
+    },
   },
 });

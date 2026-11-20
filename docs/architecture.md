@@ -226,3 +226,17 @@ success against the configured 14 m threshold, allowing closest approach to rema
 an informative continuous metric instead of being clipped at the normal intercept
 boundary. Run-level results, paired deltas, distributions, approximate 95% mean
 confidence intervals, and the generated conclusion are exportable.
+
+## Dynamics models: reference vs fidelity
+
+The **planar-2.5D model is the engagement reference**. Every preset's
+outcome mix, the statistical baseline gates, and the default run are
+calibrated and validated on it. The **six-DOF model is an opt-in
+vehicle-fidelity mode** for dynamics studies (actuator lag, currents,
+attitude) — it is deterministic and physics-tested at the vehicle level,
+but the engagement chain is *not* tuned for it: under six-DOF the
+weapon's slower trajectory changes classification timing and terminal
+geometry, and several presets that are near-perfect on the reference
+model (cluttered approach, silent approach) fail to complete. Selecting
+6-DOF in the control panel is a fidelity experiment, not an alternative
+validated scenario set; validating it is future work.
