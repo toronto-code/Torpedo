@@ -88,7 +88,15 @@ battery-persistent decoys) is delay-INSENSITIVE at every setting:
 ~1.4 in the gauntlet, ~2.4 under ambiguity. Knowledge dominates
 physics: the first shot's discredited distraction removes the seducer
 whatever its battery life, and scene difficulty was never expendable.
-A fast follow-up buys nothing in this model. Simultaneous multi-weapon engagements (allocation,
-shoot-shoot-look timing in one world) remain future engine work; the
-study's stated pessimism is that classification state does not persist
-across shots.
+A fast follow-up buys nothing in this model. Since that study, engine-level salvos exist (`weapon.salvo`): a wingman
+weapon with its own vehicle, seeker phase machine, fuze, and energy
+prosecutes the SAME designated solution with a covariance-scaled
+lateral spread (aiming along the solution's error ellipse — a heading
+spread alone washes out by midcourse). The `salvo` preset fires the
+two-weapon spread into the full countermeasure gauntlet. The measured
+finding: the spread reproduces the single-weapon outcome mix exactly —
+a shared-authority salvo inherits the designation's fate, and the
+gauntlet kills through ambiguity, not geometry. Two independent methods
+(the sequential study and the simultaneous spread) now agree: the
+classification problem, not the counter-countermeasure problem, is
+where weapons are lost.

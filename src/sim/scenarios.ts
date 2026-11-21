@@ -16,6 +16,7 @@ export type AmbiguityPreset =
   | "ambiguous-fluctuator"
   | "silent-approach"
   | "wire-guided"
+  | "salvo"
   | "high-ambiguity";
 
 function contactVehicle(
@@ -354,6 +355,17 @@ export function createAmbiguityScenarioConfig(
       // classification matures — hold fire until the picture does too.
       config.doctrine!.minTrackAgeS = 25;
       config.runtime.maxTime = 330;
+      return config;
+    }
+    case "salvo": {
+      // Two-weapon spread against the full countermeasure gauntlet: the
+      // wingman launches 8 s behind the lead, offset 10 degrees — the
+      // classic spread that covers solution error and splits the
+      // countermeasures between two arrivals.
+      config.contacts = structuredClone(
+        createAmbiguityScenarioConfig("decoy-stress", seed).contacts,
+      );
+      config.weapon!.salvo = { intervalS: 8, spreadDeg: 10 };
       return config;
     }
     case "high-ambiguity":

@@ -21,6 +21,7 @@ describe("engagement outcome baseline", () => {
         "high-ambiguity",
         "silent-approach",
         "wire-guided",
+        "salvo",
       ],
     });
     const fraction = (preset: string, outcome: string): number => {
@@ -52,6 +53,11 @@ describe("engagement outcome baseline", () => {
     // continuous-agreement wire cut make it a first-class scenario.
     expect(fraction("wire-guided", "correct-hostile")).toBeGreaterThanOrEqual(0.66);
     expect(fraction("wire-guided", "miss")).toBeLessThanOrEqual(0.34);
+
+    // Two-weapon spread against the gauntlet: every run must complete
+    // with the wingman launched, at the single-weapon outcome mix (the
+    // spread inherits the designation's fate — see docs).
+    expect(fraction("salvo", "miss")).toBeLessThanOrEqual(0.34);
 
     // Nothing regresses into pure-timeout territory.
     for (const variant of report.variants) {

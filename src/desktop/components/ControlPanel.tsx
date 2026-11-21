@@ -123,6 +123,7 @@ export function ControlPanel(props: Props) {
           <option value="ambiguous-fluctuator">Ambiguous fluctuator · confidence</option>
           <option value="silent-approach">Silent approach · bearings-only TMA</option>
           <option value="wire-guided">Wire-guided · launch platform</option>
+          <option value="salvo">Salvo · two-weapon spread</option>
           <option value="high-ambiguity">High ambiguity · combined</option>
         </select>
 

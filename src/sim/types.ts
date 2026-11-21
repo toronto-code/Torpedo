@@ -237,6 +237,15 @@ export interface WeaponSystemConfig {
    *  picture (designated estimate + authorization) until the wire is cut
    *  at terminal activation, after which its own seeker is sovereign. */
   wireGuidance?: boolean;
+  /** Two-weapon salvo: a wingman launches after the interval, offset in
+   *  heading by the spread, prosecuting the same designated solution.
+   *  Absent keeps the single-weapon engine exactly. */
+  salvo?: {
+    /** Launch interval after the lead weapon (s). */
+    intervalS: number;
+    /** Angular spread between the weapons (deg, wingman offset left). */
+    spreadDeg: number;
+  };
   /** Radiated noise of the weapon itself (truth side): a target with
    *  perception hears this instead of pings while the seeker is passive.
    *  Sprinting loudly advertises; quiet search speed stays stealthy. */
@@ -638,6 +647,8 @@ export interface WeaponTelemetry {
   sensorMode?: "passive" | "active";
   /** True while the launch platform steers the weapon over wire. */
   wireAttached?: boolean;
+  /** Weapon slot label for salvo telemetry ("lead" / "wing"). */
+  slot?: "lead" | "wing";
   /** Designated track 2-sigma position uncertainty (m); the TMA solution
    *  quality. Null when no track is held. */
   solutionSigmaM?: number | null;
@@ -660,6 +671,8 @@ export interface TelemetrySample {
   weapon?: WeaponTelemetry;
   contacts?: ContactTruth[];
   engagement?: EngagementTelemetry;
+  /** Wingman weapon (salvo); present once launched. */
+  wingman?: { torpedo: VehicleState; weapon: WeaponTelemetry };
   acoustic?: AcousticChannelState | null;
 }
 
@@ -683,6 +696,8 @@ export interface RenderSnapshot {
   engagement?: EngagementTelemetry;
   /** Launch platform state; present only with a platform block. */
   platform?: VehicleState;
+  /** Wingman weapon (salvo); present once launched. */
+  wingman?: { torpedo: VehicleState; weapon: WeaponTelemetry };
   acoustic?: AcousticChannelState | null;
 }
 

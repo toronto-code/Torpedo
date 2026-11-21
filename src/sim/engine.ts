@@ -187,6 +187,17 @@ export class SimulationEngine {
   // True once the platform's designation has crossed the wire at least
   // once; losing it afterwards cuts the wire.
   private wireHadDesignation = false;
+  // Wingman weapon (salvo): a second fully-equipped weapon prosecuting
+  // the SAME designated solution, launched after an interval with an
+  // angular spread. Null until launched / when no salvo is configured.
+  private wingTorpedo: VehicleState | null = null;
+  private wingDynamics: VehicleDynamics | null = null;
+  private wingHoming: HomingState | null = null;
+  private wingFuze: FuzeState | null = null;
+  private wingEnergyWs: number | null = null;
+  private wingDistance = 0;
+  private wingPrevious: { x: number; y: number; z: number } | null = null;
+  private wingLaunched = false;
   // When the wire solution stopped being corroborated (null = currently
   // corroborated). Sustained disagreement cuts the wire.
   private corroborationLostAt: number | null = null;
@@ -572,7 +583,9 @@ export class SimulationEngine {
   }
 
   /** Nearest active truth contact in full 3D (fuze/termination scoring). */
-  private nearestActiveContact(): { runtime: ContactRuntime; separation: number } | null {
+  private nearestActiveContact(
+    origin?: { x: number; y: number; z: number },
+  ): { runtime: ContactRuntime; separation: number } | null {
     if (!this.contactRuntimes) return null;
     // Doppler-style fuze discrimination: near-stationary scatterers
     // (turbulence clouds, bottom features) do not actuate a tuned
@@ -590,10 +603,11 @@ export class SimulationEngine {
       ) {
         continue;
       }
+      const at = origin ?? this.torpedo.position;
       const separation = Math.hypot(
-        runtime.state.position.x - this.torpedo.position.x,
-        runtime.state.position.y - this.torpedo.position.y,
-        runtime.state.position.z - this.torpedo.position.z,
+        runtime.state.position.x - at.x,
+        runtime.state.position.y - at.y,
+        runtime.state.position.z - at.z,
       );
       if (!best || separation < best.separation) best = { runtime, separation };
     }
@@ -1288,6 +1302,7 @@ export class SimulationEngine {
             : null,
       armed: this.fuzeState?.armed ?? false,
       commandedSpeed: this.torpedoControl.speedCommand,
+      slot: this.weapon.salvo ? "lead" : undefined,
       sensorMode:
         this.weapon.sensorPolicy === "passive-midcourse" && !this.sensorActivated
           ? "passive"
@@ -1365,7 +1380,41 @@ export class SimulationEngine {
       weapon: this.buildWeaponTelemetry(),
       contacts: this.buildContactTruth(),
       engagement: this.buildEngagementTelemetry(),
+      wingman: this.buildWingmanTelemetry(),
       acoustic: this.latestAcoustic,
+    };
+  }
+
+  /** Wingman weapon telemetry; null until launched or when no salvo. */
+  private buildWingmanTelemetry():
+    | { torpedo: VehicleState; weapon: WeaponTelemetry }
+    | undefined {
+    if (!this.wingTorpedo || !this.wingHoming) return undefined;
+    const weapon = this.weapon!;
+    const battery = weapon.endurance?.battery;
+    const speed = this.wingTorpedo.speed;
+    return {
+      torpedo: this.wingTorpedo,
+      weapon: {
+        phase: this.wingHoming.phase,
+        phaseEnteredAt: this.wingHoming.enteredPhaseAt,
+        trackLostFor: null,
+        enduranceRemaining:
+          battery && this.wingEnergyWs !== null
+            ? this.wingEnergyWs /
+              Math.max(1e-6, battery.hotelW + battery.dragKW * speed ** 3)
+            : null,
+        armed: this.wingFuze?.armed ?? false,
+        commandedSpeed:
+          this.wingHoming.phase === "terminal" &&
+          weapon.speed?.sprintSpeed !== undefined
+            ? weapon.speed.sprintSpeed
+            : (weapon.speed?.cruiseSpeed ?? this.config.torpedo.commandedSpeed),
+        slot: "wing",
+        sensorMode: "active",
+        enablePoint: null,
+        interceptPoint: null,
+      },
     };
   }
 
@@ -1376,6 +1425,7 @@ export class SimulationEngine {
       torpedo: this.torpedo,
       target: this.target,
       platform: this.platformState ?? undefined,
+      wingman: sample.wingman,
       estimate: sample.estimate,
       observation: this.latestObservation,
       guidance: this.guidance,
@@ -1392,6 +1442,7 @@ export class SimulationEngine {
     reason: ExperimentResult["terminationReason"],
     sample: TelemetrySample,
     fuzeMissDistance?: number,
+    detonationOrigin?: { x: number; y: number; z: number },
   ): void {
     this.result = {
       seed: this.config.seed,
@@ -1428,7 +1479,7 @@ export class SimulationEngine {
     }
     if (this.contactRuntimes) {
       this.result.tewaEvents = this.tewa.events.map((event) => ({ ...event }));
-      const nearest = this.nearestActiveContact();
+      const nearest = this.nearestActiveContact(detonationOrigin);
       if (
         (reason === "fuzed-detonation" || reason === "intercept") &&
         nearest
@@ -1448,6 +1499,221 @@ export class SimulationEngine {
         this.result.engagementOutcome = "miss";
       }
     }
+  }
+
+  /** Launches the wingman at its interval, offset by the spread. */
+  private maybeLaunchWingman(): void {
+    const salvo = this.weapon?.salvo;
+    if (!salvo || this.wingLaunched || this.timestamp < salvo.intervalS) return;
+    this.wingLaunched = true;
+    this.wingDynamics = createVehicleDynamics(
+      this.config.torpedo.dynamicsModel ?? this.config.dynamics.model,
+      this.config.dynamics.sixDof,
+    );
+    const spread = (salvo.spreadDeg * Math.PI) / 180;
+    const initial = {
+      ...this.config.torpedo.initial,
+      heading: this.config.torpedo.initial.heading - spread,
+    };
+    this.wingTorpedo = this.wingDynamics.initialize({
+      ...this.config.torpedo,
+      initial,
+    });
+    this.wingHoming = initialHomingState();
+    this.wingFuze = initialFuzeState();
+    this.wingEnergyWs =
+      this.weapon?.endurance?.battery?.capacityWs ?? null;
+    this.phaseTimeline.push({
+      phase: "run-out",
+      startedAt: this.timestamp,
+      reason: "wingman launched",
+    });
+  }
+
+  /**
+   * Wingman tick: pure proportional navigation on the SHARED designated
+   * solution (one fire-control authority, two weapons), the same phase
+   * machine, closest-point fuze, and energy budget. Returns the true
+   * separation at a wingman fuze detonation, else null. The wingman
+   * always runs an active seeker and shares the lead's depth-target
+   * latch — it attacks the same contact.
+   */
+  private updateWingman(): number | null {
+    if (!this.wingTorpedo || !this.wingDynamics || !this.wingHoming) {
+      return null;
+    }
+    const salvo = this.weapon!.salvo!;
+    const track = this.selectedTrack();
+    const weapon = this.weapon!;
+    const estimatedRange = track
+      ? magnitude2(
+          subtract2(track.position, {
+            x: this.wingTorpedo.position.x,
+            y: this.wingTorpedo.position.y,
+          }),
+        )
+      : null;
+    const phaseUpdate = updateHomingPhase({
+      state: this.wingHoming,
+      timestamp: this.timestamp,
+      track,
+      estimatedRange,
+      distanceTravelled: this.wingDistance,
+      weapon,
+      stalenessBound: this.trackStalenessBound(),
+    });
+    this.wingHoming = phaseUpdate.state;
+    const phase = this.wingHoming.phase;
+
+    // Guidance: hold launch heading through run-out, loiter in
+    // reacquisition, otherwise proportional navigation on the shared
+    // solution.
+    let command: GuidanceCommand;
+    if (phase === "run-out") {
+      command = idleGuidance(
+        this.timestamp,
+        this.config.guidance.law,
+        this.config.torpedo.initial.heading - (salvo.spreadDeg * Math.PI) / 180,
+      );
+    } else if (phase === "reacquisition" || !track) {
+      const turnRate =
+        weapon.phases?.searchTurnRate ??
+        this.config.torpedo.parameters.maxTurnRate;
+      command = {
+        timestamp: this.timestamp,
+        law: this.config.guidance.law,
+        lateralAcceleration: turnRate * Math.max(1, this.wingTorpedo.speed),
+        desiredHeading: this.wingTorpedo.heading,
+        losRate: 0,
+        closingVelocity: 0,
+        trackAge: track?.age ?? Number.MAX_SAFE_INTEGER,
+        saturated: false,
+      };
+    } else {
+      // Spread doctrine: the wingman aims along the solution's error
+      // ellipse, offset laterally by a fraction of the 2-sigma position
+      // uncertainty — a heading spread alone washes out by midcourse.
+      const sigma = Math.sqrt(
+        Math.max(
+          0,
+          (track.covariance[0]?.[0] ?? 0) + (track.covariance[1]?.[1] ?? 0),
+        ),
+      );
+      const dx = track.position.x - this.wingTorpedo.position.x;
+      const dy = track.position.y - this.wingTorpedo.position.y;
+      const lineOfSight = Math.max(1, Math.hypot(dx, dy));
+      const offset = 0.7 * sigma;
+      const spreadTrack: TrackEstimate = {
+        ...track,
+        position: {
+          x: track.position.x + (-dy / lineOfSight) * offset,
+          y: track.position.y + (dx / lineOfSight) * offset,
+        },
+      };
+      command = computeGuidance(
+        {
+          timestamp: this.timestamp,
+          ownPosition: {
+            x: this.wingTorpedo.position.x,
+            y: this.wingTorpedo.position.y,
+          },
+          ownVelocity: {
+            x: this.wingTorpedo.velocity.x,
+            y: this.wingTorpedo.velocity.y,
+          },
+          ownHeading: this.wingTorpedo.heading,
+          track: spreadTrack,
+        },
+        this.config.guidance,
+      );
+    }
+
+    const cruise = weapon.speed?.cruiseSpeed ?? this.config.torpedo.commandedSpeed;
+    const speed =
+      phase === "terminal" && weapon.speed?.sprintSpeed !== undefined
+        ? weapon.speed.sprintSpeed
+        : cruise;
+    const rawYawRate = command.lateralAcceleration / Math.max(1, this.wingTorpedo.speed);
+    const maximum = this.config.torpedo.parameters.maxTurnRate;
+    const depthTarget = clamp(
+      this.heldDepthTarget ?? this.config.torpedo.commandedDepth,
+      5,
+      (this.config.environment?.waterDepth ?? 500) - 20,
+    );
+    const previous = this.wingTorpedo.position;
+    this.wingTorpedo = this.wingDynamics.integrate(
+      this.wingTorpedo,
+      {
+        yawRateCommand: clamp(rawYawRate, -maximum, maximum),
+        depthRateCommand: depthRateAutopilot(
+          depthTarget,
+          this.wingTorpedo,
+          this.config.torpedo.parameters,
+        ),
+        speedCommand: speed,
+      },
+      this.config.torpedo,
+      this.dt,
+    );
+    this.wingDistance += Math.hypot(
+      this.wingTorpedo.position.x - previous.x,
+      this.wingTorpedo.position.y - previous.y,
+    );
+    if (this.wingEnergyWs !== null) {
+      const battery = weapon.endurance?.battery;
+      if (battery) {
+        this.wingEnergyWs -=
+          (battery.hotelW + battery.dragKW * this.wingTorpedo.speed ** 3) * this.dt;
+      }
+    }
+    this.wingFuze = updateFuzeArming(
+      this.wingFuze ?? initialFuzeState(),
+      this.timestamp,
+      this.fuzeArmAt ?? 0,
+    );
+    // Fuze against the nearest true contact to the WINGMAN.
+    let nearest: { separation: number; velocity: number } | null = null;
+    for (const runtime of this.contactRuntimes ?? []) {
+      if (!runtime.active) continue;
+      const separation = Math.hypot(
+        runtime.state.position.x - this.wingTorpedo.position.x,
+        runtime.state.position.y - this.wingTorpedo.position.y,
+        runtime.state.position.z - this.wingTorpedo.position.z,
+      );
+      const contactSpeed = Math.hypot(
+        runtime.state.velocity.x,
+        runtime.state.velocity.y,
+      );
+      if (
+        weapon.fuze?.minTargetSpeedMs !== undefined &&
+        contactSpeed < weapon.fuze.minTargetSpeedMs
+      ) {
+        continue;
+      }
+      if (!nearest || separation < nearest.separation) {
+        nearest = { separation, velocity: contactSpeed };
+      }
+    }
+    const target = this.target;
+    const wingRange = nearest?.separation ??
+      Math.hypot(
+        target.position.x - this.wingTorpedo.position.x,
+        target.position.y - this.wingTorpedo.position.y,
+        target.position.z - this.wingTorpedo.position.z,
+      );
+    if (this.wingFuze?.armed === true && this.engagementAuthorized) {
+      const update = updateProximityFuze(
+        this.wingFuze,
+        wingRange,
+        weapon.fuze ?? {},
+        this.fuzeRandom ?? undefined,
+      );
+      this.wingFuze = update.state;
+      if (update.detonate) {
+        return update.detonationSeparation ?? wingRange;
+      }
+    }
+    return null;
   }
 
   step(forceSnapshot = false): EngineStep {
@@ -1475,6 +1741,16 @@ export class SimulationEngine {
       // weapon would deadlock: activation waits on the relayed
       // designation, which is gone. Release it to its own doctrine.
       this.cutWire("platform solution lost");
+    }
+    this.maybeLaunchWingman();
+    const wingDetonation = this.updateWingman();
+    if (this.wingEnergyWs !== null && this.wingEnergyWs <= 0 && this.wingTorpedo) {
+      this.wingTorpedo = null;
+      this.phaseTimeline.push({
+        phase: this.wingHoming?.phase ?? "homing",
+        startedAt: this.timestamp,
+        reason: "wingman expended",
+      });
     }
     if (this.contactRuntimes && this.lastPingAt !== null) {
       this.lastPingAt = null;
@@ -1721,7 +1997,14 @@ export class SimulationEngine {
     // Multi-contact termination uses the nearest true contact (proximity
     // scoring, like the fuze); legacy keeps the designated single target.
     if (!isFiniteArray(stateValues)) this.finish("invalid-state", sample);
-    else if (fuzeSeparation !== null) {
+    else if (wingDetonation !== null) {
+      this.finish(
+        "fuzed-detonation",
+        sample,
+        wingDetonation,
+        this.wingTorpedo?.position ?? undefined,
+      );
+    } else if (fuzeSeparation !== null) {
       this.finish("fuzed-detonation", sample, fuzeSeparation);
     }
     else if (exhausted && this.timestamp < this.config.runtime.maxTime) {

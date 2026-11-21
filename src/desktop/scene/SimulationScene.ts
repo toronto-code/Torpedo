@@ -569,6 +569,10 @@ export class SimulationScene {
   private readonly contactMeshes: ContactMeshPool;
   private readonly torpedoMarker: THREE.Sprite;
   private readonly torpedoLabel: THREE.Sprite;
+  private readonly wing: THREE.Group = createVehicle(0xffb46c, false);
+  private readonly wingTrail: Trail = new Trail({ color: 0xffb46c, opacity: 0.8, limit: 2_000 });
+  private readonly wingMarker: THREE.Sprite = createMarkerSprite(0xffb46c);
+  private readonly wingLabel: THREE.Sprite = createLabelSprite("wing");
   private readonly platform: THREE.Group = createVehicle(0x8fd4b8, false);
   private readonly platformMarker: THREE.Sprite = createMarkerSprite(0x8fd4b8);
   private readonly platformLabel: THREE.Sprite = createLabelSprite("platform");
@@ -662,6 +666,10 @@ export class SimulationScene {
     this.torpedoLabel = createLabelSprite("weapon");
     this.torpedoLabel.visible = false;
     this.scene.add(this.torpedoMarker, this.torpedoLabel);
+    this.wing.visible = false;
+    this.wingMarker.visible = false;
+    this.wingLabel.visible = false;
+    this.scene.add(this.wing, this.wingTrail.line, this.wingMarker, this.wingLabel);
     this.platform.scale.setScalar(1.6);
     this.platform.visible = false;
     this.platformMarker.visible = false;
@@ -727,6 +735,7 @@ export class SimulationScene {
       this.torpedoTrail.clear();
       this.targetTrail.clear();
       this.estimateTrail.clear();
+      this.wingTrail.clear();
       this.contactMeshes.clearTrails();
       return;
     }
@@ -748,6 +757,10 @@ export class SimulationScene {
     if (snapshot.contacts) {
       this.contactMeshes.pushTrailPoints(snapshot.contacts, scratchDesired);
     }
+    if (snapshot.wingman) {
+      toRenderPositionInto(snapshot.wingman.torpedo.position, scratchDesired);
+      this.wingTrail.push(scratchDesired.x, scratchDesired.y, scratchDesired.z);
+    }
     if (snapshot.estimate) {
       toRenderHorizontalInto(snapshot.estimate.position, scratchToPosition.y, scratchDesired);
       this.estimateTrail.push(scratchDesired.x, scratchDesired.y, scratchDesired.z);
@@ -766,6 +779,10 @@ export class SimulationScene {
       this.targetTrail.push(scratchToPosition.x, scratchToPosition.y, scratchToPosition.z);
       if (snapshot.contacts) {
         this.contactMeshes.pushTrailPoints(snapshot.contacts, scratchDesired);
+      }
+      if (snapshot.wingman) {
+        toRenderPositionInto(snapshot.wingman.torpedo.position, scratchDesired);
+        this.wingTrail.push(scratchDesired.x, scratchDesired.y, scratchDesired.z);
       }
       if (snapshot.estimate) {
         toRenderHorizontalInto(snapshot.estimate.position, scratchToPosition.y, scratchDesired);
@@ -1010,6 +1027,31 @@ export class SimulationScene {
       this.platform.visible = false;
       this.platformMarker.visible = false;
       this.platformLabel.visible = false;
+    }
+    const wingman = this.current.wingman;
+    if (wingman) {
+      toRenderPositionInto(wingman.torpedo.position, scratchDesired);
+      this.wing.position.copy(scratchDesired);
+      this.wing.rotation.set(0, -wingman.torpedo.heading, 0);
+      this.wingMarker.position.copy(scratchDesired);
+      this.wingLabel.position.copy(scratchDesired);
+      this.wing.visible = true;
+      this.wingMarker.visible = true;
+      this.wingLabel.visible = true;
+      const worldHeight = Math.max(
+        1,
+        2 *
+          this.perspective.position.distanceTo(scratchDesired) *
+          Math.tan((this.perspective.fov * Math.PI) / 360),
+      );
+      const markerSize = worldHeight * 0.03;
+      this.wingMarker.scale.set(markerSize, markerSize, 1);
+      const labelWidth = worldHeight * 0.12;
+      this.wingLabel.scale.set(labelWidth, labelWidth * 0.25, 1);
+    } else {
+      this.wing.visible = false;
+      this.wingMarker.visible = false;
+      this.wingLabel.visible = false;
     }
     const truthContacts = this.current.contacts;
     if (truthContacts && truthContacts.length > 0) {
