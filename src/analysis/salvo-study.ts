@@ -57,10 +57,34 @@ export interface SalvoStudyReport {
   runs: SalvoRunResult[];
 }
 
-/** Expendable countermeasures are gone by the time the follow-up arrives. */
 const EXPENDABLE_KINDS = new Set(["decoy", "knuckle", "jammer", "bubble-screen"]);
 
-const FOLLOW_UP_DELAY_S = 90;
+/** Per-kind remaining effectiveness at the follow-up's arrival: what the
+ *  countermeasure has left after decaying through the delay. Only the
+ *  fading kinds actually die; a decoy swims on its battery indefinitely
+ *  in this model, so a fast follow-up fights the full fresh gauntlet. */
+function remainingEffect(
+  spec: { kind: string; behavior?: { kind: string; fadeDbPerS?: number; noiseDb?: number; lossDb?: number } },
+  delayS: number,
+): "gone" | { fadedByDb: number } {
+  switch (spec.kind) {
+    case "decoy":
+      // Battery-limited in reality; persists through these delays.
+      return delayS > 600 ? "gone" : { fadedByDb: 0 };
+    case "knuckle": {
+      const fade = (spec.behavior?.fadeDbPerS ?? 1.2) * delayS;
+      return fade > 18 ? "gone" : { fadedByDb: fade };
+    }
+    case "bubble-screen": {
+      const fade = (spec.behavior?.fadeDbPerS ?? 0.08) * delayS;
+      return fade > 11 ? "gone" : { fadedByDb: fade };
+    }
+    case "jammer":
+      return delayS > 300 ? "gone" : { fadedByDb: 0 };
+    default:
+      return "gone";
+  }
+}
 
 function extrapolateSurvivor(
   hostile: ContactTruth,
@@ -87,17 +111,36 @@ function followUpConfig(
   /** Contact the first shot detonated against, when it was not the
    *  hostile: the team will not re-attack the same distraction. */
   discreditedContactId: string | null,
+  delayS: number,
 ): SimulationConfig {
+  // (delayS drives both the survivor extrapolation and countermeasure decay)
   const config = createAmbiguityScenarioConfig(preset, seed);
-  config.contacts = (config.contacts ?? []).filter(
-    (spec) =>
-      !EXPENDABLE_KINDS.has(spec.kind) && spec.id !== discreditedContactId,
-  );
+  config.contacts = (config.contacts ?? []).filter((spec) => {
+    if (spec.id === discreditedContactId) return false;
+    if (!EXPENDABLE_KINDS.has(spec.kind)) return true;
+    const effect = remainingEffect(spec, delayS);
+    if (effect === "gone") return false;
+    // Still alive but faded: weaken its echo/noise by what has decayed.
+    if (effect.fadedByDb > 0) {
+      if (spec.targetStrengthDb !== undefined) {
+        spec.targetStrengthDb -= effect.fadedByDb;
+      }
+      const noise = spec.behavior;
+      if (noise?.kind === "jammer" || noise?.kind === "bubble-screen") {
+        // Jammer noise / screen loss live on the behavior; approximate the
+        // fade by trimming the level/loss fields.
+        if (noise.kind === "bubble-screen" && noise.lossDb !== undefined) {
+          noise.lossDb = Math.max(0, noise.lossDb - effect.fadedByDb);
+        }
+      }
+    }
+    return true;
+  });
   const hostileSpec = config.contacts.find((spec) => spec.id === "hostile");
   if (hostileSpec) {
     const survivor = extrapolateSurvivor(
       hostile,
-      FOLLOW_UP_DELAY_S,
+      delayS,
       hostileSpec.perception?.diveDepth ?? hostile.depth,
     );
     hostileSpec.vehicle.initial = {
@@ -114,7 +157,11 @@ export function runSalvoStudy(options: {
   presets?: AmbiguityPreset[];
   runs: number;
   baseSeed: number;
+  /** Seconds between shots (reload/transit). Controls how much
+   *  countermeasure effectiveness survives to the follow-up. */
+  followUpDelayS?: number;
 }): SalvoStudyReport {
+  const followUpDelayS = options.followUpDelayS ?? 90;
   const presets = options.presets ?? ["decoy-stress", "high-ambiguity"];
   const runs: SalvoRunResult[] = [];
   const variants: SalvoVariantSummary[] = [];
@@ -162,7 +209,7 @@ export function runSalvoStudy(options: {
           ? first.engagedContact.id
           : null;
       const second = runHeadless(
-        followUpConfig(preset, seed, survivor, discredited),
+        followUpConfig(preset, seed, survivor, discredited, followUpDelayS),
       ).result;
       const secondKill = second.engagementOutcome === "correct-hostile";
       if (secondKill) {
@@ -193,7 +240,7 @@ export function runSalvoStudy(options: {
   return {
     baseSeed: options.baseSeed,
     runsPerVariant: options.runs,
-    followUpDelayS: FOLLOW_UP_DELAY_S,
+    followUpDelayS,
     variants,
     runs,
   };

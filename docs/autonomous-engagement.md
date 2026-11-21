@@ -80,7 +80,15 @@ The headline finding across ten seeds: the full countermeasure gauntlet
 shots — while pure scene ambiguity (high-ambiguity) costs ~2.4, because
 ambiguity is not an expendable: a second shot re-runs the same
 classification lottery. **Ambiguity costs more shots than
-countermeasures.** Simultaneous multi-weapon engagements (allocation,
+countermeasures.**
+
+A follow-up timing sweep (delays 20 / 45 / 90 s, with per-kind
+countermeasure decay modeled at arrival — fading knuckles and screens,
+battery-persistent decoys) is delay-INSENSITIVE at every setting:
+~1.4 in the gauntlet, ~2.4 under ambiguity. Knowledge dominates
+physics: the first shot's discredited distraction removes the seducer
+whatever its battery life, and scene difficulty was never expendable.
+A fast follow-up buys nothing in this model. Simultaneous multi-weapon engagements (allocation,
 shoot-shoot-look timing in one world) remain future engine work; the
 study's stated pessimism is that classification state does not persist
 across shots.

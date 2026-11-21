@@ -11,10 +11,12 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const runs = Number(valueAfter(args, "--runs") ?? 10);
   const baseSeed = Number(valueAfter(args, "--seed") ?? 20260814);
+  const delay = Number(valueAfter(args, "--delay") ?? 90);
   const out = resolve(valueAfter(args, "--out") ?? "outputs/salvo-study");
-  const report = runSalvoStudy({ runs, baseSeed });
+  const report = runSalvoStudy({ runs, baseSeed, followUpDelayS: delay });
   await mkdir(out, { recursive: true });
   await writeFile(resolve(out, "salvo-study.json"), JSON.stringify(report, null, 2));
+  console.log(`follow-up delay: ${report.followUpDelayS} s`);
   for (const variant of report.variants) {
     const line = [
       variant.id.padEnd(20),
