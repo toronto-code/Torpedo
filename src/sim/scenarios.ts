@@ -17,6 +17,7 @@ export type AmbiguityPreset =
   | "silent-approach"
   | "wire-guided"
   | "salvo"
+  | "fast-boat"
   | "high-ambiguity";
 
 function contactVehicle(
@@ -366,6 +367,66 @@ export function createAmbiguityScenarioConfig(
         createAmbiguityScenarioConfig("decoy-stress", seed).contacts,
       );
       config.weapon!.salvo = { intervalS: 8, spreadDeg: 10 };
+      return config;
+    }
+    case "fast-boat": {
+      // A hostile surface combatant among merchant traffic: no layer to
+      // dive under — its defense is speed and hard turns, and the real
+      // problem is telling a warship from the merchants it hides among.
+      const boatVehicle = vehicle(2200, 900, Math.PI - 0.3, 18, 1);
+      boatVehicle.parameters = {
+        ...boatVehicle.parameters,
+        maxSpeed: 24,
+        maxAcceleration: 1.5,
+        speedResponseTime: 6,
+        maxTurnRate: (8 * Math.PI) / 180,
+        maxTurnAcceleration: (12 * Math.PI) / 180,
+      };
+      boatVehicle.commandedSpeed = 18;
+      config.runtime.maxTime = 260;
+      config.contacts = [
+        {
+          id: "hostile",
+          kind: "hostile-surface",
+          vehicle: boatVehicle,
+          targetStrengthDb: 17,
+          radiatedNoiseDb: 158,
+          aspectEcho: { bowDb: 11, beamDb: 24 },
+          behavior: { kind: "scripted-evasive", triggerRange: 900, rate: -0.08 },
+          perception: {
+            detectionThresholdDb: 45,
+            detectionTransitionDb: 3,
+            reactionDelay: 3,
+            reactionGrace: 6,
+            evasiveRate: 0.08,
+            bearingSigmaRad: 0.1,
+          },
+        },
+        {
+          id: "freighter",
+          kind: "commercial-surface",
+          vehicle: vehicle(600, -1500, 1.2, 12, 0.5),
+          targetStrengthDb: 22,
+          radiatedNoiseDb: 165,
+          behavior: { kind: "constant-velocity" },
+        },
+        {
+          id: "trawler",
+          kind: "commercial-surface",
+          vehicle: vehicle(1500, 200, -0.4, 9, 0.5),
+          targetStrengthDb: 14,
+          radiatedNoiseDb: 150,
+          behavior: { kind: "constant-velocity" },
+        },
+        {
+          id: "whale",
+          kind: "biological",
+          vehicle: vehicle(900, 900, 2.4, 1.6, 4),
+          targetStrengthDb: -8,
+          radiatedNoiseDb: 148,
+          behavior: { kind: "biologic-wander", amplitude: 0.8, period: 35 },
+        },
+      ];
       return config;
     }
     case "high-ambiguity":

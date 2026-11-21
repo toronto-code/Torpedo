@@ -189,6 +189,7 @@ function disposeObject(object: THREE.Object3D): void {
 
 const CONTACT_COLORS: Record<string, number> = {
   "hostile-sub": 0xe7b97c,
+  "hostile-surface": 0xff9e64,
   "friendly-sub": 0x7cd67c,
   "commercial-surface": 0xc9c9c9,
   biological: 0x7cb8d4,
@@ -289,6 +290,9 @@ class ContactMeshPool {
     let geometry: THREE.BufferGeometry;
     if (kind === "commercial-surface") {
       geometry = new THREE.BoxGeometry(70, 12, 18);
+    } else if (kind === "hostile-surface") {
+      // Compact combatant hull: flatter, sharper than a merchant box.
+      geometry = new THREE.BoxGeometry(38, 7, 9);
     } else if (kind === "biological") {
       geometry = new THREE.SphereGeometry(7, 12, 8);
     } else if (kind === "decoy") {

@@ -1489,7 +1489,8 @@ export class SimulationEngine {
           kind: nearest.runtime.spec.kind,
         };
         this.result.engagementOutcome =
-          nearest.runtime.spec.kind === "hostile-sub"
+          nearest.runtime.spec.kind === "hostile-sub" ||
+            nearest.runtime.spec.kind === "hostile-surface"
             ? "correct-hostile"
             : nearest.runtime.spec.kind === "decoy" ||
                 nearest.runtime.spec.kind === "knuckle"
@@ -1794,7 +1795,11 @@ export class SimulationEngine {
             const runtimes = this.contactRuntimes;
             const spawnerId =
               runtime.spec.deployedBy ??
-              runtimes.find((c) => c.spec.kind === "hostile-sub")?.spec.id ??
+              runtimes.find(
+                (c) =>
+                  c.spec.kind === "hostile-sub" ||
+                  c.spec.kind === "hostile-surface",
+              )?.spec.id ??
               "";
             const spawner =
               runtimes.find((candidate) => candidate.spec.id === spawnerId) ??

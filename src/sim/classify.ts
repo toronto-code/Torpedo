@@ -196,6 +196,7 @@ export class ContactClassifier {
       if (features.passiveSnrDb !== null) {
         const passive = features.passiveSnrDb;
         if (passive > 30) {
+          // Loud broadband fits any surface machinery.
           if (cls === "surface-commercial") likelihood += 1.5;
           else if (cls === "biological") likelihood += 0.5;
           else likelihood -= 0.8;

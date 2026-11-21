@@ -33,6 +33,7 @@ export type HomingPhase = "run-out" | "homing" | "terminal" | "reacquisition";
  *  observation/classification/selection pipeline. */
 export type ContactKind =
   | "hostile-sub"
+  | "hostile-surface"
   | "friendly-sub"
   | "commercial-surface"
   | "biological"

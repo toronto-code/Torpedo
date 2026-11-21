@@ -85,6 +85,34 @@ function qualityFactor(quality: string): number {
   return 0.4;
 }
 
+/** Doctrine kinematic override: classification can call a fast contact a
+ *  merchant, but speed is a threat cue no label overrules — a surface
+ *  contact at warship speed remains an engagement candidate (real
+ *  doctrine: warships hide among merchant traffic; speed betrays them). */
+export const FAST_SURFACE_THRESHOLD_MS = 15;
+
+function threatEligible(
+  candidate: TewaCandidate,
+  doctrine: DoctrineConfig,
+): boolean {
+  const excluded = doctrine.excludedClasses.includes(
+    candidate.classification.best,
+  );
+  if (!excluded) return HOSTILITY_WEIGHT[candidate.classification.best] > 0;
+  if (candidate.classification.best !== "surface-commercial") return false;
+  // Uncertainty-aware: a young, noisy velocity estimate cannot prove
+  // warship speed — the lower confidence bound must clear the bar.
+  const speed = magnitude2(candidate.estimate.velocity);
+  const velocitySigma = Math.sqrt(
+    Math.max(
+      0,
+      (candidate.estimate.covariance[2]?.[2] ?? 0) +
+        (candidate.estimate.covariance[3]?.[3] ?? 0),
+    ),
+  );
+  return speed - 2 * velocitySigma >= FAST_SURFACE_THRESHOLD_MS;
+}
+
 export function candidateScore(
   candidate: TewaCandidate,
   ownPosition: Vec2,
@@ -120,10 +148,8 @@ export function updateTewa(input: TewaUpdateInput): TewaState {
     events: [...input.state.events],
   };
 
-  const eligible = input.candidates.filter(
-    (candidate) =>
-      !input.doctrine.excludedClasses.includes(candidate.classification.best) &&
-      HOSTILITY_WEIGHT[candidate.classification.best] > 0,
+  const eligible = input.candidates.filter((candidate) =>
+    threatEligible(candidate, input.doctrine),
   );
   const scored = eligible
     .map((candidate) => ({
@@ -224,9 +250,7 @@ export function updateTewa(input: TewaUpdateInput): TewaState {
     satisfied =
       designated.classification.confidence >=
         input.doctrine.requiredConfidence &&
-      !input.doctrine.excludedClasses.includes(
-        designated.classification.best,
-      ) &&
+      threatEligible(designated, input.doctrine) &&
       (input.doctrine.engagementMaxRange === undefined ||
         range <= input.doctrine.engagementMaxRange) &&
       (input.doctrine.minTrackAgeS === undefined ||
